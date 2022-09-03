@@ -1,4 +1,4 @@
-## TranNhiem 2022-09-02
+# TranNhiem 2022-09-02
 '''
 This script is used to test the performance of the stable diffusion inpainting algorithm.
 Code is based on the code from HuggingFace's implementation of the stable diffusion inpainting algorithm.
@@ -13,73 +13,180 @@ https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffuse
 
 '''
 
-import numpy as np 
-import torch 
+import numpy as np
+import torch
 import torchcsprng as csprng
-from torch import autocast 
-from diffusers import StableDiffusionPipeline, LSMDiscreteScheduler 
-import requests 
-import PIL 
-from PIL import Image 
+from torch import autocast
+from diffusers import StableDiffusionPipeline, LMSDiscreteScheduler
+import requests
+import PIL
+from PIL import Image
 from io import BytesIO
-from diffusers import AutoencoderKL, DDIMSscheduler, DiffusionPipeline, PNDMscheduler, UNet2DConditionModel 
-from tqdm.auto import tqdm 
-import inspect 
-from typing import List, Tuple, Dict, Any, Optional, Union 
-from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer 
+from diffusers import AutoencoderKL, DDIMScheduler, DiffusionPipeline, PNDMScheduler, UNet2DConditionModel
+from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
+from tqdm.auto import tqdm
+import inspect
+from typing import List, Tuple, Dict, Any, Optional, Union
+from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
-generator= csprng.creat_random_device_generator('/dev/urandom')
+generator = csprng.create_random_device_generator('/dev/urandom')
 
-class StableDiffusionInpaintingPipeline(DiffusionPipeline): 
+
+class StableDiffusionInpaintingPipeline(DiffusionPipeline):
     def __init__(
-        self, 
-        vae: AutoencoderKL, 
+        self,
+        vae: AutoencoderKL,
         text_encoder: CLIPTextModel,
-        tokenizer: CLIPTokenizer, 
+        tokenizer: CLIPTokenizer,
         unet: UNet2DConditionModel,
-        scheduler: Union[DDIMSscheduler, PNDMscheduler], 
-        safety_checker: StableDiffusionSafetyChecker, 
+        scheduler: Union[DDIMScheduler, PNDMScheduler],
+        safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPFeatureExtractor,
-    ): 
-        super().__init__() 
-        scheduler= scheduler.set_format("pt")
+    ):
+        super().__init__()
+        scheduler = scheduler.set_format("pt")
         self.register_modules(
-            vae= vae, 
-            text_encoder= text_encoder, 
-            tokenizer= tokenizer, 
-            unet = unet, 
-            scheduler= scheduler, 
-            safety_checker= safety_checker, 
-            feature_extractor= feature_extractor,
+            vae=vae,
+            text_encoder=text_encoder,
+            tokenizer=tokenizer,
+            unet=unet,
+            scheduler=scheduler,
+            safety_checker=safety_checker,
+            feature_extractor=feature_extractor,
         )
-    @torch.no_grad()
-    def __call(
-        self, 
-        prompt: Union[str, List[str]], 
-        init_image: torch.FloatTensor, 
-        mask_image: torch.FloatTensor, 
-        num_inference_steps: Optional[int] = 50, 
-        guidance_scale: Optional[float]= 7.5, 
-        eta: Optional[float] = 0.0, 
-        generator: Optional[torch.Generator] = None, 
-        output_type: Optional[str] = "pil",
-    ): 
-        if isinstance(prompt, str): 
-            batch_size=1 
-        elif isinstance(prompt, list): 
-            batch_size= len(prompt)
-        else: 
-            raise ValueError(f"prompt must be a string or a list of strings but U provided {type(prompt)}")
 
-        ## Setting the timesteps 
-        accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
-        extra_set_kwargs = {} 
-        offset = 0 
-        if accepts_offset: 
-            offset = 1 
+    @torch.no_grad()
+    def __call__(
+        self,
+        prompt: Union[str, List[str]],
+        init_image: torch.FloatTensor,
+        mask_image: torch.FloatTensor,
+        num_inference_steps: Optional[int] = 50,
+        guidance_scale: Optional[float] = 7.5,
+        eta: Optional[float] = 0.0,
+        generator: Optional[torch.Generator] = None,
+        output_type: Optional[str] = "pil",
+    ):
+        if isinstance(prompt, str):
+            batch_size = 1
+        elif isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            raise ValueError(
+                f"prompt must be a string or a list of strings but U provided {type(prompt)}")
+
+        # Setting the timesteps
+        accepts_offset = "offset" in set(inspect.signature(
+            self.scheduler.set_timesteps).parameters.keys())
+        extra_set_kwargs = {}
+        offset = 0
+        if accepts_offset:
+            offset = 1
             extra_set_kwargs["offset"] = 1
-        
+
         self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
 
-        # Encode the init image into latents and scale the latents 
-        #     
+        # Encode the init image into latents and scale the latents
+        init_latents = self.vae.encode(init_image.to(self.device)).sample()
+        init_latents = 0.18215 * init_latents
+        init_latents_orig = init_latents
+        # Preprocess the masks
+        mask = mask_image.to(self.device)
+        # prepare init_latents noise to latents
+        init_latents = torch.cat([init_latents] * batch_size)
+
+        # Get the original timestep using init_timestep
+        init_timestep = int(num_inference_steps) + offset
+        init_timestep = min(init_timestep, num_inference_steps)
+        timesteps = self.scheduler.timesteps[-init_timestep]
+        timesteps = torch.tensor(
+            [timesteps] * batch_size, dtype=torch.long, device=self.device)
+
+        # Adding noise to to the latents for each timesteps
+        noise = torch.randn(init_latents.shape,
+                            generator=generator, device=self.device)
+        init_latents = self.scheduler.add_noise(init_latents, noise, timesteps)
+
+        # Getting the text prompts embedding from frozen CLIP Text encoder
+        text_input = self.tokenizer(prompt,
+                                    padding="max_length",
+                                    max_length=self.tokenizer.model_max_length,
+                                    truncation=True,
+                                    return_tensors="pt",
+                                    )
+        text_embeddings = self.text_encoder(
+            text_input.input_ids.to(self.device))[0]
+
+        # Guidance_scale is defined analog to the guidance weight more information is available in the paper
+        # Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
+
+        do_classifier_free_guidance = guidance_scale > 1.0
+        if do_classifier_free_guidance:
+            max_length = text_input.input_ids.shape[1]
+            uncond_input = self.tokenizer(
+                [""] * batch_size, padding="max_length", max_length=max_length, truncation=True, return_tensors="pt"
+            )
+            uncond_embeddings = self.text_encoder(
+                uncond_input.input_ids.to(self.device))[0]
+
+            # Concatenate the text embeddings and uncond embeddings into single batch to avoid doing 2 forward passes
+            text_embeddings = torch.cat(
+                [text_embeddings, uncond_embeddings], dim=0)  # (2* batch_size, 512)
+
+        # Different Schedulers have different signatures parameters
+        # DDIMS scheduler has `eta [0-> 1]` parameter  DDIM paper: https://arxiv.org/abs/2010.02502
+        accepts_eta = "eta" in set(inspect.signature(
+            self.scheduler.step).parameters.keys())
+        extra_step_kwargs = {}
+        if accepts_eta:
+            extra_step_kwargs["eta"] = eta
+
+        latents = init_latents
+        t_start = max(num_inference_steps - init_timestep + offset, 0)
+        # total= len(self.scheduler.timesteps[t_start:])):
+        for i, t in tqdm(enumerate(self.scheduler.timesteps[t_start:]), ):
+            # expand the latents if doing classifier free guidance
+            latent_mdoel_input = torch.cat(
+                [latents]*2) if do_classifier_free_guidance else latents
+
+            # predict the noise residual
+            noise_pred = self.unet(
+                latent_mdoel_input, t, encoder_hidden_states=text_embeddings)['sample']
+
+            # Perform guidance
+            if do_classifier_free_guidance:
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + guidance_scale * \
+                    (noise_pred_text - noise_pred_uncond)
+
+            # Compute the previous noisy smaple x_t --> x_t -1
+            latents = self.scheduler.step(
+                noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
+
+            # Masking
+            if t > 1:
+                t_noise = torch.randn(
+                    latents.shape, generator=generator, device=self.device)
+                init_latents_proper = self.scheduler.add_noise(
+                    init_latents_orig, t_noise, t-1)
+                latents = init_latents_proper * mask + latents * (1-mask)
+
+            else:
+                latents = init_latents_orig * mask + latents * (1-mask)
+
+        # Scale and decode the image latents with VAE
+        latents = 1 / 0.18215 * latents
+        # applies more and more noise at each step
+        image = self.vae.decode(latents)
+        image = (image / 2 + 0.5).clamp(0, 1)
+        image = image.cpu().permute(0, 2, 3, 1).numpy()
+
+        # run safety checker
+        #safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
+        #image, has_nsfw_concept = self.safety_checker(images=image, clip_input=safety_cheker_input.pixel_values)
+
+        has_nsfw_concept = 0
+        if output_type == "pil":
+            image = self.numpy_to_pil(image)
+
+        return {"sample": image, "nsfw_content_detected": has_nsfw_concept}
