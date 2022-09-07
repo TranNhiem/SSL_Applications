@@ -10,12 +10,17 @@ from torch import autocast
 import torchcsprng as csprng
 from stable_diffusion_inpainting import StableDiffusionInpaintingPipeline_
 from glob import glob
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 # from huggingface_hub import notebook_login
 # notebook_login() ## Using for Colab or jupyter notebook
 # Running your python script using
 # huggingface-cli login
-
+# CUDA_VISIBLE_DEVICES="0,1,2,3,4"
 # Using the image inpainting pipeline
+
+# device = torch.device(
+#     "cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 pipeimg = StableDiffusionInpaintingPipeline_.from_pretrained(
     "CompVis/stable-diffusion-v1-4", revision="fp16",
     torch_dtype=torch.float16,
@@ -89,7 +94,8 @@ def infer(prompt, img, samples_num, steps_num, scale, option):
     print(prompt)
 
     # Generate image for the masking area with prompt
-    with autocast("cuda"):
+    # with autocast("cuda"):#"cuda"
+    with torch.cuda.amp.autocast():
         images = pipeimg([prompt]*samples_num, init_image=img, mask_image=mask,
                          num_inference_steps=steps_num, guidance_scale=scale, generator=generator)["sample"]  # generator=generator
     return images
@@ -100,7 +106,7 @@ with block as demo:
         "<h1><center> Image Inpainting App </center></h1> Different image resolutions should be 'working'")
 
     gr.Markdown(
-        "<h3><center> Illustration How to use this App </center></h3> https://drive.google.com/file/d/11JLQ9Slc7Udyw8Mcs0QWzEVy8kQotqrf/view?usp=sharing ")
+        "<h3><center> Illustration How to use this App </center></h3> https://youtu.be/q5kAOi-edoY ")
 
     with gr.Group():
         with gr.Box():
@@ -148,5 +154,5 @@ with block as demo:
         #     image = gr.Image(tool="sketch",label="Input image", type="numpy", value=str(ims_uri))#value=f"{example_dir}/343785.jpg") #source='upload',  # value=os.path.join(os.path.dirname(__file__),".jpg"
         #     gr.Examples(fn=infer, examples=[os.path.join(os.path.dirname(__file__)),image], inputs=[text, image, samples_num,steps_num, scale, option], outputs=gallery, cache_examples=True)
 
-demo.launch(server_name="140.115.53.102",  server_port=5555,
+demo.launch(server_name="140.115.53.102",  server_port=1111,
             share=True, enable_queue=True, )  # debug=True)
