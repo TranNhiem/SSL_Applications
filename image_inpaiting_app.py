@@ -1,4 +1,4 @@
-
+#@TranNhiem 2022 09/05
 import gradio as gr
 import PIL
 import os
