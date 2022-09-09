@@ -1,15 +1,13 @@
 #@TranNhiem 2022 09/05
 import gradio as gr
-import PIL
+
 import os
-from PIL import Image
-from io import BytesIO
-import numpy as np
 import torch
 from torch import autocast
 import torchcsprng as csprng
-from stable_diffusion_inpainting import StableDiffusionInpaintingPipeline_
+from SSL_Applications.stable_diffusion_model import StableDiffusionInpaintingPipeline_
 from glob import glob
+from utils import mask_processes, image_preprocess
 os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 # from huggingface_hub import notebook_login
 # notebook_login() ## Using for Colab or jupyter notebook
@@ -34,49 +32,6 @@ def dummy(images, **kwargs): return images, False
 pipeimg.safety_checker = dummy
 
 block = gr.Blocks(css=".container { max-width: 1200px; margin: auto; }")
-
-
-def image_preprocess(image):
-    image = Image.fromarray(image)
-    w, h = image.size
-    if w > 512:
-        h = int(h * (512/w))
-        w = 512
-    if h > 512:
-        w = int(w*(512/h))
-        h = 512
-    # resize to integer multiple of 64, 32 can sometimes result in tensor mismatch errors
-    w, h = map(lambda x: x - x % 64, (w, h))
-    image = image.resize((w, h), resample=PIL.Image.LANCZOS)
-    print(f"this is image.size: {image.size}")
-    image = np.array(image).astype(np.float32) / 255.0
-    image = image[None].transpose(0, 3, 1, 2)
-    image = torch.from_numpy(image)
-    return 2.0 * image - 1.0
-
-
-def mask_processes(mask):
-    mask = Image.fromarray(mask)
-    mask = mask.convert("L")
-    w, h = mask.size
-    if w > 512:
-        h = int(h * (512/w))
-        w = 512
-    if h > 512:
-        w = int(w*(512/h))
-        h = 512
-    w, h = map(lambda x: x - x % 64, (w, h))
-    w //= 8
-    h //= 8
-
-    mask = mask.resize((w, h), resample=PIL.Image.LANCZOS)
-    print(f"Mask size:, {mask.size}")
-    mask = np.array(mask).astype(np.float32) / 255.0
-    mask = np.tile(mask, (4, 1, 1))
-    mask = mask[None].transpose(0, 1, 2, 3)
-    mask[np.where(mask != 0.0)] = 1.0  # using bool to find the uer drawed
-    mask = torch.from_numpy(mask)
-    return mask
 
 
 generator = csprng.create_random_device_generator('/dev/urandom')
