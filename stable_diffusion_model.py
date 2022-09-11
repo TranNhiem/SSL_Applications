@@ -15,7 +15,7 @@ https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffuse
 
 import numpy as np
 import torch
-import torchcsprng as csprng
+#import torchcsprng as csprng
 from torch import autocast
 from diffusers import StableDiffusionPipeline, LMSDiscreteScheduler
 import requests
@@ -29,9 +29,11 @@ from tqdm.auto import tqdm
 import inspect
 from typing import List, Tuple, Dict, Any, Optional, Union
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
-from utils import image_preprocess
-generator = csprng.create_random_device_generator('/dev/urandom')
+from utils import image_preprocess, preprocess_mask_v2
+import random
 
+#generator = csprng.create_random_device_generator('/dev/urandom')
+generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
 
 def decode_image(latents, vae,): 
     latents= 1 / 0.18215 * latents 
@@ -80,6 +82,7 @@ class StableDiffusion_text_image_to_image_(DiffusionPipeline):
         strength: Optional[float] = 0.8,
         return_intermediate: bool = False,
         output_type: Optional[str] = "pil",
+    
         **kwargs,
     ):
         start_time= time.time()
@@ -271,6 +274,7 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         eta: Optional[float] = 0.0,
         generator: Optional[torch.Generator] = None,
         output_type: Optional[str] = "pil",
+        inpainting_v2: bool =False, 
 
     ):
 
@@ -292,12 +296,23 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
 
         # encode the init image into latents and scale the latents
+
+        
         init_latents = self.vae.encode(init_image.to(self.device)).sample()
         init_latents = 0.18215 * init_latents
         init_latents_orig = init_latents
 
         # preprocess mask
-        mask = mask_image.to(self.device)
+        if inpainting_v2: 
+            # preprocess mask
+            mask = preprocess_mask_v2(mask_image).to(self.device)
+            #mask = torch.cat([mask] * batch_size)
+            #check sizes
+            if not mask.shape == init_latents.shape:
+                raise ValueError(f"The mask and init_image should be the same size!")
+        else: 
+            mask = mask_image.to(self.device)
+        
 
         # prepare init_latents noise to latents
         init_latents = torch.cat([init_latents] * batch_size)

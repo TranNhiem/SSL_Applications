@@ -1,13 +1,16 @@
-#@TranNhiem 2022 09/05
+# @TranNhiem 2022 09/05
 import gradio as gr
 
 import os
+import sys 
+import random
 import torch
 from torch import autocast
-import torchcsprng as csprng
+# import torchcsprng as csprng
 from SSL_Applications.stable_diffusion_model import StableDiffusionInpaintingPipeline_
 from glob import glob
 from utils import mask_processes, image_preprocess
+
 os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 # from huggingface_hub import notebook_login
 # notebook_login() ## Using for Colab or jupyter notebook
@@ -28,13 +31,11 @@ pipeimg = StableDiffusionInpaintingPipeline_.from_pretrained(
 
 def dummy(images, **kwargs): return images, False
 
-
 pipeimg.safety_checker = dummy
 
-block = gr.Blocks(css=".container { max-width: 1200px; margin: auto; }")
 
-
-generator = csprng.create_random_device_generator('/dev/urandom')
+generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
+# generator = csprng.create_random_device_generator('/dev/urandom')
 example_dir = "/home/rick/code_spaces/SSL_Applications/Bird_images"
 # example_dir="Bird_images"
 
@@ -47,10 +48,9 @@ def infer(prompt, img, samples_num, steps_num, scale, option):
         mask = mask_processes(img['mask'])
     img = image_preprocess(img['image'])
     print(prompt)
-
     # Generate image for the masking area with prompt
     # with autocast("cuda"):#"cuda"
-    with torch.cuda.amp.autocast():
+    with torch.cuda.amp.autocast(dtype=torch.float16):
         images = pipeimg([prompt]*samples_num, init_image=img, mask_image=mask,
                          num_inference_steps=steps_num, guidance_scale=scale, generator=generator)["sample"]  # generator=generator
     return images

@@ -34,6 +34,8 @@ def image_preprocess(image, full_resolution=False):
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
 
+
+
 def mask_processes(mask):
     mask = Image.fromarray(mask)
     mask = mask.convert("L")
@@ -74,3 +76,77 @@ class GeneratorConfig:
     strength: float = 0.8
     init_image: Any = None
     return_intermediates: bool = False
+
+
+#--------------------------------------------------------------------
+# Section for Visual Grounding Language - Visual Helper function  
+#--------------------------------------------------------------------
+
+def coord2bin(coords, w_resize_ratio, h_resize_ratio,task): 
+    coord_list= [float(coord) for coord in coords.strip().split()]
+    bin_list = [] 
+    bin_list += ["<bin_{}>".format(int(round(coord_list[0] * w_resize_ratio / task.cfg.max_image_size * (task.cfg.num_bins - 1))))]
+    bin_list += ["<bin_{}>".format(int(round(coord_list[1] * h_resize_ratio / task.cfg.max_image_size * (task.cfg.num_bins - 1))))]
+    bin_list += ["<bin_{}>".format(int(round(coord_list[2] * w_resize_ratio / task.cfg.max_image_size * (task.cfg.num_bins - 1))))]
+    bin_list += ["<bin_{}>".format(int(round(coord_list[3] * h_resize_ratio / task.cfg.max_image_size * (task.cfg.num_bins - 1))))]
+    return ' '.join(bin_list)
+
+## Getting coordinate f
+def bin2coord(bins, w_resize_ratio, h_resize_ratio, task): 
+    bin_list= [int(bin[5:-1]) for bin in bins.strip().split()]
+    coord_list= [] 
+    coord_list += [bin_list[0] / (task.cfg.num_bins - 1) * task.cfg.max_image_size / w_resize_ratio]
+    coord_list += [bin_list[1] / (task.cfg.num_bins - 1) * task.cfg.max_image_size / h_resize_ratio]
+    coord_list += [bin_list[2] / (task.cfg.num_bins - 1) * task.cfg.max_image_size / w_resize_ratio]
+    coord_list += [bin_list[3] / (task.cfg.num_bins - 1) * task.cfg.max_image_size / h_resize_ratio]
+    return coord_list 
+
+def get_symbols_to_strip_from_output(generator): 
+    if hasattr(generator, "symbols_to_strip_from_output"): 
+        return generator.symbols_to_strip_from_output
+    else: 
+        return {generator.bos, generator.eos}
+
+def decode_fn(x, tgt_dict, bpe, generator, tokenizer= None): 
+    x= tgt_dict.string(x.int().cpu(), extra_symbols_to_ignore=get_symbols_to_strip_from_output(generator))
+    token_result= [] 
+    bin_result= [] 
+    img_result = [] 
+    for token in x.strip().split(): 
+        if token.startswith('<bin_'): 
+            bin_result.append(token)
+        elif token.startswith('<code_'): 
+            img_result.append(token)
+        else: 
+            if bpe is not None: 
+                token= bpe.decode('{}'.format(token))
+            if tokenizer is not None: 
+                token= tokenizer.decode(token)
+            if token.startswith('') or len(token_result) == 0: 
+                token_result.append(token.strip())
+            else: 
+                token_result[-1] += token 
+    return ' '.join(token_result), ' '.join(bin_result), ' '.join(img_result)
+
+
+def preprocess_mask_v2(mask):
+    mask=mask.convert("L")
+    w, h = mask.size
+    w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
+    mask = mask.resize((w//8, h//8), resample=PIL.Image.NEAREST)
+    mask = np.array(mask).astype(np.float32) / 255.0
+    mask = np.tile(mask,(4,1,1))
+    mask = mask[None].transpose(0, 1, 2, 3)#what does this step do?
+    mask = 1 - mask #repaint white, keep black
+    mask = torch.from_numpy(mask)
+    return mask
+
+
+def preprocess_image_v2(image):
+    w, h = image.size
+    w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
+    image = image.resize((w, h), resample=PIL.Image.LANCZOS)
+    image = np.array(image).astype(np.float32) / 255.0
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image)
+    return 2.0 * image - 1.0
