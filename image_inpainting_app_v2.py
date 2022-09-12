@@ -95,7 +95,6 @@ def encode_text(text, length=None, append_bos=False, append_eos=False, ):
         s = torch.cat([s, eos_item])
     return s
 
-
 def construct_sample(image: Image, instruction: str):
     patch_image = patch_resize_transform(image).unsqueeze(0)
     patch_mask = torch.tensor([True])
@@ -114,15 +113,12 @@ def construct_sample(image: Image, instruction: str):
     }
     return sample
 
-
 def apply_half(t):
     if t.dtype is torch.float32:
         return t.to(dtype=torch.half)
     return t
 
 # Getting the Coordinate from the
-
-
 def get_ofa_visual_grounding(image: Image, question):
     # construct instruction
     w, h = image.size
@@ -152,8 +148,6 @@ def get_ofa_visual_grounding(image: Image, question):
     return coords, img
 
 # Creating the mask for given Coordinate and Image size
-
-
 def creat_mask(coords, img):
     temp_mask_image = np.zeros(img.shape, dtype="uint8")
     mask_image = PIL.Image.fromarray(np.uint8(temp_mask_image)).convert("RGB")
@@ -171,11 +165,9 @@ pipeimg = StableDiffusionInpaintingPipeline_.from_pretrained(
     torch_dtype=torch.float16,
     use_auth_token=True,
 ).to("cuda")
+
 def dummy(images, **kwargs): return images, False
-
-
 pipeimg.safety_checker = dummy
-
 
 def app_run(init_image, question, prompt, samples_num, step_num, scale):
 
@@ -237,7 +229,6 @@ block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
 examples = [['./Bird_images/343785.jpg', 'yellow Bird', 'Butterfly sitting on the tree branch.'],
             ['./Bird_images/beagle_24.jpg', 'dog', 'a Hokkaido Ken dog is running in the yellow flower garden.'],
             ['./Bird_images/Bombay_33.jpg', 'black cat', 'The Somali cat is lying on the blue sofa.'],
-
             ['./Bird_images/343802.jpg', 'Bird', 'A beautiful eagle sitting on the tree branch.'],
             ['./Bird_images/343787.jpg', 'Bird','blue angery bird sitting on the tree branch.'],
             ]

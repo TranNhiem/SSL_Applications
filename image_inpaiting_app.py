@@ -7,7 +7,7 @@ import random
 import torch
 from torch import autocast
 # import torchcsprng as csprng
-from SSL_Applications.stable_diffusion_model import StableDiffusionInpaintingPipeline_
+from stable_diffusion_model import StableDiffusionInpaintingPipeline_
 from glob import glob
 from utils import mask_processes, image_preprocess
 
@@ -55,7 +55,7 @@ def infer(prompt, img, samples_num, steps_num, scale, option):
                          num_inference_steps=steps_num, guidance_scale=scale, generator=generator)["sample"]  # generator=generator
     return images
 
-
+block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
 with block as demo:
     gr.Markdown(
         "<h1><center> Image Inpainting App </center></h1> Different image resolutions should be 'working'")

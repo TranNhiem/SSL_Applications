@@ -11,7 +11,7 @@ import time
 from utils import GeneratorConfig
 from stable_diffusion_model import StableDiffusion_text_image_to_image_
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # from huggingface_hub import notebook_login
 # notebook_login() ## Using for Colab or jupyter notebook
 # Running your python script using
@@ -21,6 +21,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 # device = torch.device(
 #     "cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 class Imagegenerator: 
     def __init__(self,model: str="CompVis/stable-diffusion-v1-4"):
         '''Generate Image from prompt'''
