@@ -33,7 +33,6 @@ def dummy(images, **kwargs): return images, False
 
 pipeimg.safety_checker = dummy
 
-
 generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
 # generator = csprng.create_random_device_generator('/dev/urandom')
 example_dir = "/home/rick/code_spaces/SSL_Applications/Bird_images"

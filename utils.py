@@ -10,6 +10,24 @@ from typing import Any, List,  Optional, Union
 from pydantic.dataclasses import dataclass
 
 
+
+def preprocess_pil(image):
+    w, h = image.size
+    if w > 512:
+        h = int(h * (512/w))
+        w = 512
+    if h > 512:
+        w = int(w*(512/h))
+        h = 512
+    w, h = map(lambda x: x - x % 64, (w, h))  # resize to integer multiple of 32
+    image = image.resize((w, h), resample=PIL.Image.LANCZOS)
+    image = np.array(image).astype(np.float32) / 255.0
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image)
+    return 2.0 * image - 1.0
+
+
+
 ## Processing RGB image Handle image size for Small GPU V Ram
 def image_preprocess(image, full_resolution=False):
     image = Image.fromarray(image)
