@@ -36,5 +36,11 @@ bloom_tokenizer= AutoTokenizer.from_pretrained("bigscience/bloom-1b3")
 set_seed(1234)
 prompt="An image of hummingbirds flying over Tulip flowers"
 input= bloom_tokenizer(prompt, return_tensors="pt").to(0)
+## Using TopK output 
 output_prompts = bloom_model.generate(**input_ids, max_length=200,  top_k=1, temperature=0.9, repetition_penalty = 2.0)
 
+## Using Beam Search to sample the Outputs 
+output_prompts = bloom_model.generate(**input_ids, max_length=200, num_beams = 2, num_beam_groups = 2, top_k=1, temperature=0.9, repetition_penalty = 2.0)
+
+
+output_prompts=bloom_tokenizer.decode(output_prompts[0],  truncate_before_pattern=[r"\n\n^#", "^'''", "\n\n\n"])
