@@ -105,8 +105,7 @@ def dalle_to_SD(prompt, image_width, image_height, samples_num, step_num, scale,
         use_auth_token=True,
     ).to("cuda")
 
-    # Preprocessing image
-
+    ## Preprocessing image
     def preprocess(image):
         w, h = image.size
         if w > 512:
