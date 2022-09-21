@@ -69,7 +69,7 @@ class COCO_synthetic_Dataset(Dataset):
         self.append_id = ["test"]
         self.model = StableDiffusionPipeline.from_pretrained(
             "CompVis/stable-diffusion-v1-4", revision="fp16",
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             use_auth_token=True,
         ).to("cuda")
 
@@ -82,6 +82,8 @@ class COCO_synthetic_Dataset(Dataset):
         caption = self.prompt + pre_caption(ann['caption'], self.max_words)
         image_id = ann['image_id']
         image_name = ann['image']  # Saved image's name
+        print(image_name)
+        print(image_id)
 
         if image_id == self.append_id[-1]:
             #print("Using mode Image to generate image")
@@ -121,13 +123,12 @@ class COCO_synthetic_Dataset(Dataset):
         print(f"image name {image_id} Generated")
         return image_name
 
-
+generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
+## CoCo Caption dataset Caption Length 566.747
 print(generate_data.__len__())
-# for i in range(5):
-#     generate_data.__getitem__(i)
+for i in range(200000, 300000):
+    generate_data.__getitem__(i)
 print("------------------------ Done ------------------------")
-# for i in range(4, 6):
-#     generate_data.__getitem__(i)
 
 
 class COCO_synthetic_Dalle_SD(Dataset): 
@@ -208,6 +209,5 @@ class COCO_synthetic_Dalle_SD(Dataset):
         print(f"image name {caption} Generated")
         return image_name 
 
-
-generate_data= COCO_synthetic_Dalle_SD(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
+# generate_data= COCO_synthetic_Dalle_SD(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
 
