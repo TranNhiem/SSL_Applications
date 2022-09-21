@@ -110,8 +110,8 @@ class COCO_synthetic_Dataset(Dataset):
         self.append_id.append(image_id)
         print(f"image name {caption} Generated")
         return image_name 
+generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
 
-generate_data= COCO_synthetic_Dataset(image_root='/data1/coco_synthetic/', ann_root='/data1/coco_synthetic/')
 print(generate_data.__len__())
 # for i in range(5):
 #     generate_data.__getitem__(i)
@@ -144,9 +144,8 @@ class COCO_synthetic_Dalle_SD(Dataset):
         # /home/rick/pretrained_weights/Dalle_mini_mega
             models_root="/data1/pretrained_weight/Dalle_mini_mega",
             dtype=torch.float32,
-            device="cuda",
             is_mega=False,  # False -> Using mini model,
-            is_reusable=True,)
+            is_reusable=True,).to("cuda")
 
         ## Parameter for StableDiffusion Model 
         self.guidance_scale= guidance_scale
@@ -171,7 +170,7 @@ class COCO_synthetic_Dalle_SD(Dataset):
        
         ## Case not repeat image
         with torch.autocast('cuda'):
-            init_image= self.Dalle_model.generate_image(text=caption,
+            init_image= self.Dalle_model.generate_image(text=prompt,
                                              seed=-1,
                                              grid_size=1,
                                              is_seamless=False,  # If this set to False --> Return tensor
@@ -181,7 +180,7 @@ class COCO_synthetic_Dalle_SD(Dataset):
                                              is_verbose=False
                                              ) 
             init_image = init_image.resize((512, 512))
-            generate_image= self.SD_model(
+            generate_image= self.model(
                             prompt=[caption],
                             mode="image",
                             height=512,
@@ -199,7 +198,6 @@ class COCO_synthetic_Dalle_SD(Dataset):
         print(f"image name {caption} Generated")
         return image_name 
 
-generate_data_= COCO_synthetic_Dalle_SD(image_root='/data1/coco_synthetic/', ann_root='/data1/coco_synthetic/')
 
-for i in range(5):
-    generate_data_.__getitem__(i)
+generate_data= COCO_synthetic_Dalle_SD(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
+
