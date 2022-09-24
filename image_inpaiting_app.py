@@ -11,7 +11,7 @@ from stable_diffusion_model import StableDiffusionInpaintingPipeline_
 from glob import glob
 from utils import mask_processes, image_preprocess
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # from huggingface_hub import notebook_login
 # notebook_login() ## Using for Colab or jupyter notebook
 # Running your python script using

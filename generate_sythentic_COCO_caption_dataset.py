@@ -50,6 +50,8 @@ class COCO_synthetic_Dataset(Dataset):
         filename = 'coco_karpathy_train.json'
 
         Path(image_root + "val2014/").mkdir(parents=True, exist_ok=True)
+        Path(image_root + "train2014/").mkdir(parents=True, exist_ok=True)
+
         Path(ann_root).mkdir(parents=True, exist_ok=True)
 
         # os.makedirs(image_root+ "val2014/", exist_ok=True)
@@ -72,7 +74,7 @@ class COCO_synthetic_Dataset(Dataset):
             torch_dtype=torch.float32,
             use_auth_token=True,
         ).to("cuda")
-
+        
     def __len__(self):
         return len(self.annotation)
 
@@ -84,7 +86,6 @@ class COCO_synthetic_Dataset(Dataset):
         image_name = ann['image']  # Saved image's name
         print(image_name)
         print(image_id)
-
         if image_id == self.append_id[-1]:
             #print("Using mode Image to generate image")
             init_image = Image.open(os.path.join(self.image_root, image_name))
@@ -123,23 +124,26 @@ class COCO_synthetic_Dataset(Dataset):
         print(f"image name {image_id} Generated")
         return image_name
 
-generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
-## CoCo Caption dataset Caption Length 566.747
-print(generate_data.__len__())
-for i in range(200000, 300000):
-    generate_data.__getitem__(i)
-print("------------------------ Done ------------------------")
+# generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
+# ## CoCo Caption dataset Caption Length 566.747
+# print(generate_data.__len__())
+# for i in range(200000, 300000):
+#     generate_data.__getitem__(i)
+# print("------------------------ Done ------------------------")
 
 
 class COCO_synthetic_Dalle_SD(Dataset): 
 
-    def __init__(self, image_root, ann_root, max_words=200, prompt='highly detailed', 
+    def __init__(self, image_root, ann_root, max_words=200, prompt='A photo of ', 
                     dalle_topk=128, temperature=1., supercondition_factor=16.,
                     guidance_scale=7.5,  num_inference_steps=70, seed=123245):
         
         url = 'https://storage.googleapis.com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
         filename = 'coco_karpathy_train.json'
         Path(image_root+ "val2014/").mkdir(parents=True, exist_ok=True)
+        Path(image_root+ "train2014/").mkdir(parents=True, exist_ok=True)
+        Path(image_root+ "dalle_image/").mkdir(parents=True, exist_ok=True)
+
         Path(ann_root).mkdir(parents=True, exist_ok=True)
         download_url (url, ann_root)
         self.annotation= json.load(open(os.path.join(ann_root, filename), 'r'))
@@ -156,7 +160,8 @@ class COCO_synthetic_Dalle_SD(Dataset):
             models_root="/data1/pretrained_weight/Dalle_mini_mega",
             dtype=torch.float32,
             is_mega=False,  # False -> Using mini model,
-            is_reusable=True,).to("cuda")
+            device='cuda',
+            is_reusable=True,)
 
         ## Parameter for StableDiffusion Model 
         self.guidance_scale= guidance_scale
@@ -168,6 +173,8 @@ class COCO_synthetic_Dalle_SD(Dataset):
         "CompVis/stable-diffusion-v1-4", revision="fp16",
         torch_dtype=torch.float16,
         use_auth_token=True,).to("cuda")
+        self.new_json=[]
+    
     def __len__(self):
         return len(self.annotation)
 
@@ -178,36 +185,56 @@ class COCO_synthetic_Dalle_SD(Dataset):
         image_id= ann['image_id']
         image_name= ann['image'] ## Saved image's name
         
+        ## Caption, value, name, value, image_name, value
        
         ## Case not repeat image
+        if image_id == self.append_id[-1]:
+            
+            image_id= image_id+"1"
+            image_name= image_name[:-4] + "1.jpg"
+            self.append_id.append(image_id)
+        
+        else: 
+            self.append_id.append(image_id)
         with torch.autocast('cuda'):
-            init_image= self.Dalle_model.generate_image(text=prompt,
-                                             seed=-1,
-                                             grid_size=1,
-                                             is_seamless=False,  # If this set to False --> Return tensor
-                                             temperature=self.temeperature,
-                                             top_k=self.dalle_topk,
-                                             supercondition_factor=self.supercondition_factor,
-                                             is_verbose=False
-                                             ) 
-            init_image = init_image.resize((512, 512))
-            generate_image= self.model(
-                            prompt=[caption],
-                            mode="image",
-                            height=512,
-                            width=512,
-                            num_inference_steps=self.num_inference_steps,
-                            guidance_scale=self.guidance_scale,
-                            init_image=init_image,
-                            generator=self.generator,
-                            strength=0.8,
-                            return_intermediates=False,
-                            )['sample']
+                init_image= self.Dalle_model.generate_image(text=caption,
+                                                seed=-1,
+                                                grid_size=1,
+                                                is_seamless=False,  # If this set to False --> Return tensor
+                                                temperature=self.temeperature,
+                                                top_k=self.dalle_topk,
+                                                supercondition_factor=self.supercondition_factor,
+                                                is_verbose=False
+                                                ) 
+                print(init_image.size)
+                init_image = init_image.resize((512, 512))
+                generate_image= self.SD_model(
+                                prompt=[caption],
+                                mode="image",
+                                height=512,
+                                width=512,
+                                num_inference_steps=self.num_inference_steps,
+                                guidance_scale=self.guidance_scale,
+                                init_image=init_image,
+                                generator=self.generator,
+                                strength=0.8,
+                                return_intermediates=False,
+                                )['sample']
 
-        generate_image[0].save(os.path.join(self.image_root, image_name))
-        self.append_id.append(image_id)
+        path=os.path.join(self.image_root, image_name)
+        generate_image[0].save(path)
+        init_image.save(os.path.join("/data1/coco_synthetic/dalle_image/"+image_name))
+        new_dict={"caption":ann['caption'],"image": image_name, "image_id": image_id}  
+        self.new_json.append(new_dict)
         print(f"image name {caption} Generated")
         return image_name 
+        
+    def save_json(self, path):
+        with open(path, 'w') as outfile:
+            json.dump(self.new_json, outfile)
 
-# generate_data= COCO_synthetic_Dalle_SD(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
-
+generate_data= COCO_synthetic_Dalle_SD(image_root='/data1/coco_synthetic/', ann_root='/data1/coco_synthetic/')
+for i in range(5):
+    generate_data.__getitem__(i)
+print("------------------------ Done ------------------------")
+generate_data.save_json("/data1/coco_synthetic/coco_synthetic.json")
