@@ -33,7 +33,6 @@ print(device)
 #prompt = "A little boy wearing headphones and looking at computer monitor"
 generator = torch.Generator(device='cuda').manual_seed(20000)
 
-
 def dalle_text_2_image(prompt, dalle_model="Dalle-mega", stream_image=False):
     model = MinDalle(
         # /home/rick/pretrained_weights/Dalle_mini_mega
@@ -92,10 +91,9 @@ def dalle_text_2_image(prompt, dalle_model="Dalle-mega", stream_image=False):
     torch.cuda.empty_cache()
     return image
 
-
 #image= dalle_text_2_image(prompt)
 # ---------------------------------------------------------
-# Section DALLE to Stable Diffusion Model
+# Section 1  DALLE to Stable Diffusion Model
 # ---------------------------------------------------------
 def dalle_to_SD(prompt, image_width, image_height, samples_num, step_num, scale, option,):
 
@@ -149,13 +147,11 @@ def dalle_to_SD(prompt, image_width, image_height, samples_num, step_num, scale,
 
     #images[0].save("./Bird_images/"+prompt.replace(" ", "_")+"SD_Variant"+".jpg")
     return [init_img_], images
-
 # img=dalle_to_SD(prompt)
 
 # ---------------------------------------------------------
-# Section Stable Diffusion Model text_2_image
+# Section 2 Stable Diffusion Model text_2_image
 # ---------------------------------------------------------
-
 
 def text_2_image(prompt):
     pipeimg = StableDiffusionPipeline.from_pretrained(
@@ -193,8 +189,6 @@ def text_2_image(prompt):
 #image = text_2_image(prompt)
 # text_2_image(prompt) Gradio App Demo
 # ---------------------------------------------------------
-
-
 # def text_2_image_gradio():
 block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
 

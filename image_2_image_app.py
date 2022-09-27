@@ -1,4 +1,8 @@
 ## This application building text-2-Image, Image-2-Image Generation Application 
+'''
+1. Working with The Image-2-Image Variant by CLIP model 
+2. Working with the Image-2-Image Variant with Different Configuration, Scheduler 
+'''
 
 from dataclasses import asdict
 from torch import autocast

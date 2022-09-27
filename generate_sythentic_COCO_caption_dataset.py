@@ -181,7 +181,6 @@ class COCO_synthetic_Dataset(Dataset):
 #     generate_data.__getitem__(i)
 # print("------------------------ Done ------------------------")
 
-
 class COCO_synthetic_Dalle_SD(Dataset): 
 
     def __init__(self, image_root, ann_root, max_words=200, prompt='A photo of highly detailed of ', 
@@ -285,7 +284,7 @@ class COCO_synthetic_Dalle_SD(Dataset):
                                 prompt=[caption],
                                 mode="image",
                                 height=512,
-                                width=512,
+                               width=512,
                                 num_inference_steps=self.num_inference_steps,
                                 guidance_scale=self.guidance_scale,
                                 init_image=init_image,
@@ -307,7 +306,7 @@ class COCO_synthetic_Dalle_SD(Dataset):
             json.dump(self.new_json, outfile)
 
 generate_data= COCO_synthetic_Dalle_SD(image_root='/data1/coco_synthetic_Dalle_SD/', ann_root='/data1/coco_synthetic_Dalle_SD/')
-for i in range(500000, 566747):
+for i in range(100000):
     generate_data.__getitem__(i)
 print("------------------------ Done ------------------------")
-generate_data.save_json("/data1/coco_synthetic/coco_synthetic_500k_566747k.json")
+generate_data.save_json("/data1/coco_synthetic/coco_synthetic_100k.json")

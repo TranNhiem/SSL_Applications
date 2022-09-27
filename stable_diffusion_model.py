@@ -33,6 +33,7 @@ from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer, CLI
 from utils import image_preprocess, preprocess_mask_v2, preprocess_pil
 import random
 import open_clip
+from torchvision import transforms
 
 #generator = csprng.create_random_device_generator('/dev/urandom')
 generator = torch.Generator(device="cuda").manual_seed(1024) #random.randint(0,10000) # change the seed to get different results
@@ -332,6 +333,7 @@ class StableDiffusion_text_image_to_image_(DiffusionPipeline):
                 "time": time.time() - start_time,
             }
 
+###----------------- Stable Diffusion Inpainting  -----------------###
 class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
     def __init__(
         self,
@@ -511,6 +513,7 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
 
         return {"sample": image, "nsfw_content_detected": has_nsfw_concept}
 
+###-----------------  Stable Diffusion Text2Image, Image2Image -----------------###
 class StableDiffusionPipeline(DiffusionPipeline):
     def __init__(
         self,
@@ -721,8 +724,43 @@ class StableDiffusionPipeline(DiffusionPipeline):
             "intermediates": intermediate_images,
             "time": time.time() - start_time,
         }
+
+###----------------- Stable Diffusion Text2Video -----------------###
 class StableDiffusionVideo(DiffusionPipeline): 
     pass 
+
+###----------------- CLIP Guided Diffusion  -----------------###
+class StableDiffusionCLIP_Guided(DiffusionPipeline): 
+    '''
+    CLIP Guided Stable Diffusion Model 
+    Reference - https://github.com/Jack000/glid-3-xl
+
+    '''
+    def __init__(self, vae: AutoencoderKL, 
+                        text_encoder: CLIPTextModel,
+                        clip_model: CLIPModel, 
+                        unet: UNet2DConditionModel, 
+                        scheduler: Union[LMSDiscreteScheduler, PNDMScheduler],
+                        tokenizer: CLIPTokenizer, 
+                        feature_extractor: CLIPFeatureExtractor, 
+                        ):
+
+        super().__init__(vae, text_encoder,clip_model, unet, scheduler, tokenizer, feature_extractor)
+        scheduler= scheduler.set_format("pt")
+        self.register_modules(
+            vae=vae,
+            text_encoder=text_encoder,
+            clip_model=clip_model,
+            tokenizer=tokenizer,
+            unet=unet,
+            scheduler=scheduler,
+            feature_extractor=feature_extractor,
+        )
+
+        self.normalize = transforms.Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+
+    ###----------------- CLIP Guided Diffusion Continue -----------------###
+        
 
 class SD_img2img_clip_vision_encoder(): 
     pass 
