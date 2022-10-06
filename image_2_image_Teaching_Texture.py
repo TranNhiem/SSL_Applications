@@ -1,7 +1,9 @@
 ## This application building text-2-Image, Image-2-Image Generation Application 
 '''
-1. Working with The Image-2-Image Variant by CLIP model 
+1. Working with The Image-2-Image Teaching Texture concpet to SD
 2. Working with the Image-2-Image Variant with Different Configuration, Scheduler 
+https://textual-inversion.github.io/
+
 '''
 
 from dataclasses import asdict

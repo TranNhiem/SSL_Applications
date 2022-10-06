@@ -3,11 +3,12 @@ from PIL import Image
 from io import BytesIO
 import PIL
 import torch 
-
+from torch import nn 
+from torch.nn import functional as F 
 # from dataclasses import dataclass
 from dataclasses import field
 from typing import Any, List,  Optional, Union
-from pydantic.dataclasses import dataclass
+# from pydantic.dataclasses import dataclass
 
 
 
@@ -25,8 +26,6 @@ def preprocess_pil(image):
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
-
-
 
 ## Processing RGB image Handle image size for Small GPU V Ram
 def image_preprocess(image, full_resolution=False):
@@ -53,7 +52,6 @@ def image_preprocess(image, full_resolution=False):
     return 2.0 * image - 1.0
 
 
-
 def mask_processes(mask):
     mask = Image.fromarray(mask)
     mask = mask.convert("L")
@@ -77,23 +75,22 @@ def mask_processes(mask):
     mask = torch.from_numpy(mask)
     return mask
 
-
-@dataclass
-class GeneratorConfig:
-    """Configuration for a generation"""
-    prompt: Union[str, List[str]]
-    num_images: int = 1
-    mode: str = "prompt"   # prompt, image, mask
-    height: Optional[int] = 512
-    width: Optional[int] = 512
-    num_inference_steps: Optional[int] = 50
-    guidance_scale: Optional[float] = 7.5
-    eta: Optional[float] = 0.0
-    # generator: Optional[Any] = None
-    output_type: Optional[str] = "pil"
-    strength: float = 0.8
-    init_image: Any = None
-    return_intermediates: bool = False
+# @dataclass
+# class GeneratorConfig:
+#     """Configuration for a generation"""
+#     prompt: Union[str, List[str]]
+#     num_images: int = 1
+#     mode: str = "prompt"   # prompt, image, mask
+#     height: Optional[int] = 512
+#     width: Optional[int] = 512
+#     num_inference_steps: Optional[int] = 50
+#     guidance_scale: Optional[float] = 7.5
+#     eta: Optional[float] = 0.0
+#     # generator: Optional[Any] = None
+#     output_type: Optional[str] = "pil"
+#     strength: float = 0.8
+#     init_image: Any = None
+#     return_intermediates: bool = False
 
 
 #--------------------------------------------------------------------
@@ -146,7 +143,6 @@ def decode_fn(x, tgt_dict, bpe, generator, tokenizer= None):
                 token_result[-1] += token 
     return ' '.join(token_result), ' '.join(bin_result), ' '.join(img_result)
 
-
 def preprocess_mask_v2(mask):
     mask=mask.convert("L")
     w, h = mask.size
@@ -159,7 +155,6 @@ def preprocess_mask_v2(mask):
     mask = torch.from_numpy(mask)
     return mask
 
-
 def preprocess_image_v2(image):
     w, h = image.size
     w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
@@ -168,3 +163,45 @@ def preprocess_image_v2(image):
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
+
+
+#--------------------------------------------------------------------
+# Section Stable Diffusion Guided CLIP Helper function
+#--------------------------------------------------------------------
+#The class object to resize the image generated feature.
+class resize_feature(nn.Module): 
+    def __init__(self, cut_size, cut_power=1.0): 
+        super().__init__()
+        self.cut_size = cut_size
+        self.cut_power = cut_power 
+    
+    def forward(self, pixel_values, num_cutouts): 
+        sideY, sideX = pixel_values.shape[2:4]
+        max_size= min(sideX, sideY)
+        min_size= min(sideX, sideY, self.cut_size)
+        cutouts= [] 
+        
+        for _ in range(num_cutouts): 
+            size= int(torch.rand([])**self.cut_power * (max_size - min_size) + min_size)
+            offsetx= torch.randint(0, sideX - size + 1, ())
+            offsety= torch.randint(0, sideY - size + 1, ())
+            cutout= pixel_values[:, :, offsety:offsety + size, offsetx:offsetx + size]
+            cutouts.append(F.adaptive_avg_pool2d(cutout,  self.cut_size))
+        
+        return torch.cat(cutouts)
+
+def set_requires_grad(model, requires_grad): 
+    for param in model.parameters(): 
+        param.requires_grad= requires_grad 
+
+def image_grid(imgs, rows, cols): 
+    assert len(imgs)== rows*cols 
+    w, h = imgs[0].size
+    grid= Image.new('RGB', size=(cols*w, rows*h))
+    grid_w, gird_h = grid.size 
+
+    for i, img in enumerate(imgs): 
+        grid.paste(img, box=(i%cols*w, i//cols*h))
+    return grid 
+
+

@@ -1,6 +1,6 @@
 
 # @TranNhiem 2022/09/06 
-
-# ipycanvas ??? 
+# Reference repository 
+# https://github.com/lkwq007/stablediffusion-infinity
 ## Curent Outpainting for JupyterNote Book 
 
