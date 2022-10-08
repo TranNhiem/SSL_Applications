@@ -37,6 +37,9 @@ import random
 import open_clip
 from torchvision import transforms
 from torch.nn import functional as F
+from aitemplate.compiler import Model
+import os 
+import warnings
 
 #generator = csprng.create_random_device_generator('/dev/urandom')
 generator = torch.Generator(device="cuda").manual_seed(1024) #random.randint(0,10000) # change the seed to get different results
@@ -49,292 +52,6 @@ def decode_image(latents, vae,):
     return image 
 
 
-## This class Initialization the text_2_image & image_2_image generation
-class StableDiffusion_text_image_to_image_(DiffusionPipeline):
-    def __init__(
-        self,
-        vae: AutoencoderKL,
-        text_encoder: CLIPTextModel,
-        #image_encoder: CLIPModel,
-        tokenizer: CLIPTokenizer,
-        unet: UNet2DConditionModel,
-        scheduler: Union[DDIMScheduler, PNDMScheduler, LMSDiscreteScheduler],
-        safety_checker: StableDiffusionSafetyChecker,
-        feature_extractor: CLIPFeatureExtractor, 
-        open_clip_encoder: bool= True, 
-    ):
-        super().__init__()
-        scheduler = scheduler.set_format("pt")
-        self.register_modules(
-            vae=vae,
-            text_encoder=text_encoder,
-            #image_encoder=image_encoder,
-            tokenizer=tokenizer,
-            unet=unet,
-            scheduler=scheduler,
-            safety_checker=safety_checker,
-            feature_extractor=feature_extractor,
-
-        )
-        #open_clip_encoder=True
-        self.open_clip_encoder= open_clip_encoder
-        if open_clip_encoder:
-            # Other models is here: https://github.com/mlfoundations/open_clip/blob/main/src/open_clip/pretrained.py
-            model, _, preprocess = open_clip.create_model_and_transforms('ViT-L-14', pretrained='openai')
-            self.preprocess_img=preprocess
-            self.image_encoder_open_clip= model
-        
-        ## Using image_coder from OpenAI_Clip 
-        else: 
-            self.image_preprocess= None#CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch14")
-
-    @torch.no_grad()
-    def __call__(
-        self,
-        prompt: Union[str, List[str]],
-        mode: str = "prompt", 
-        using_clip: bool= False,
-        height: Optional[int] = 512,
-        width: Optional[int] = 512,
-        init_image: Union[torch.FloatTensor, PIL.Image.Image] = None,
-        num_inference_steps: Optional[int] = 50,
-        guidance_scale: Optional[float] = 7.5,
-        eta: Optional[float] = 0.0,
-        generator: Optional[torch.Generator] = None,
-        strength: Optional[float] = 0.8,
-        return_intermediate: bool = False,
-        output_type: Optional[str] = "pil",
-    
-        **kwargs,
-    ):
-        start_time= time.time()
-        if isinstance(prompt, str):
-            batch_size = 1
-        elif isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            raise ValueError(
-                f"prompt must be a string or a list of strings but U provided {type(prompt)}")
-
-        if height % 8!=0 or width%8!=0: 
-            raise ValueError(f"image height and width have to be divisible by 8 but you provide {height} & {width}")
-        
-        # Setting the timesteps
-        accepts_offset = "offset" in set(inspect.signature(
-            self.scheduler.set_timesteps).parameters.keys())
-        extra_set_kwargs = {}
-        offset = 0
-        if accepts_offset:
-            offset = 1
-            extra_set_kwargs["offset"] = 1
-
-        self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
-
-        if mode =="prompt": 
-            ## Checking the size image generation
-
-            # Get the initial random noise 
-            latents= torch.randn(
-                (batch_size, self.unet.in_channels, height//8, width //8), 
-                generator = generator, 
-                 device=self.device,
-            )
-            t_start = 0 
-        
-        elif mode == "image": 
-            if not init_image: 
-                raise ValueError("you are using image_to_image please provide the init_image")   
-            if strength <0 or strength > 1: 
-                raise ValueError(f"The value of strenth should in [0.0, 1.0] but is {strength}")
-
-            if not isinstance(init_image, torch.FloatTensor): 
-                if using_clip: 
-                    print(f'img2img with semantic embedding feature extractor')
-                    if not isinstance(init_image, torch.FloatTensor): 
-                        if self.open_clip_encoder: 
-                            init_image= self.preprocess(init_image).unsqueeze(0).to(self.device) 
-                            image_embedding= self.image_encoder_open_clip.encode_image(init_image)
-                        else: 
-                            init_image= self.image_preprocess(image= init_image, return_tensors="pt").to(self.device)
-                            image_embedding= self.image_encoder.get_image_features(**init_image)
-                    else: 
-                        if self.open_clip_encoder: 
-                            image_embedding= self.image_encoder_open_clip.encode_image(init_image)
-                        else:
-                            image_embedding= self.image_encoder.get_image_features(**init_image)
-                    image_embedding=image_embedding.unsqueeze(1)
-                else:
-                    print(f' img2img with text condition')
-                    init_image= image_preprocess(init_image, full_resolution=True)
-                    # Encode the init image into latents and scale the latents
-                    init_latents = self.vae.encode(init_image.to(self.device)).sample()
-                    init_latents = 0.18215 * init_latents
-                    # prepare init_latents noise to latents
-                    init_latents = torch.cat([init_latents] * batch_size)
-
-                    # Get the original timestep using init_timestep
-                    init_timestep = int(num_inference_steps*strength) + offset
-                    init_timestep = min(init_timestep, num_inference_steps)
-                    timesteps = self.scheduler.timesteps[-init_timestep]
-                    timesteps = torch.tensor([timesteps] * batch_size, dtype=torch.long, device=self.device)
-
-                    # Adding noise to to the latents for each timesteps
-                    noise = torch.randn(init_latents.shape,
-                                        generator=generator, device=self.device)
-                    init_latents = self.scheduler.add_noise(init_latents, noise, timesteps)
-                    latents= init_latents
-                    t_start = max(num_inference_steps - init_timestep + offset, 0)
-                  
-        
-        # Getting the text prompts embedding from frozen CLIP Text encoder
-        ## Still getting the text condition Input for the Variant image 
-        print(f"This is prompt input: {prompt}")
-        text_input = self.tokenizer(prompt,
-                                    padding="max_length",
-                                    max_length=self.tokenizer.model_max_length,
-                                    truncation=True,
-                                    return_tensors="pt",
-                                    )
-        text_embeddings = self.text_encoder(
-            text_input.input_ids.to(self.device))[0]
-
-        # Guidance_scale is defined analog to the guidance weight more information is available in the paper
-        # Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
-
-        do_classifier_free_guidance = guidance_scale > 1.0
-        if using_clip:
-            if do_classifier_free_guidance:
-                uncond_embeddings= torch.zeros_like(image_embedding)
-                ##Avoiding forward pass 2 times 
-                image_embedding=torch.cat([uncond_embeddings, image_embedding])
-            # Get the initial random noise 
-            latents_shape= (batch_size, self.unet.int_channels, height //8, width //8)
-            if latents is None: 
-                latents= torch.randn(
-                    latents_shape, 
-                    generator= generator, 
-                    device= self.device, 
-                )
-            else: 
-                if latents.shape != latents_shape: 
-                    raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {latents_shape}")
-                latents= latents.to(self.device)
-                
-        else: 
-            #Get unconditional embedding for classifier free guidance
-            if do_classifier_free_guidance:
-                max_length = text_input.input_ids.shape[-1]
-                uncond_input = self.tokenizer(
-                    [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt"
-                )# truncation=True,
-                uncond_embeddings = self.text_encoder(
-                    uncond_input.input_ids.to(self.device))[0]
-
-                # Concatenate the text embeddings and uncond embeddings into single batch to avoid doing 2 forward passes
-                text_embeddings = torch.cat(
-                    [text_embeddings, uncond_embeddings],)  # (2* batch_size, 512)
-
-        # Different Schedulers have different signatures parameters
-        # if we use LMSDiscreteScheduler, let's make sure latents are mulitplied by sigmas
-        if isinstance(self.scheduler, LMSDiscreteScheduler):latents = latents * self.scheduler.sigmas[0]
-
-        # DDIMS scheduler has `eta [0-> 1]` parameter  DDIM paper: https://arxiv.org/abs/2010.02502
-        accepts_eta = "eta" in set(inspect.signature(self.scheduler.step).parameters.keys())
-        extra_step_kwargs = {}
-        if accepts_eta:
-            extra_step_kwargs["eta"] = eta
-        
-        
-        if using_clip: 
-            for i, t in enumerate(self.progress_bar(self.scheduler.timesteps)):
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-            if isinstance(self.scheduler, LMSDiscreteScheduler):
-                sigma = self.scheduler.sigmas[i]
-                # the model input needs to be scaled to match the continuous ODE formulation in K-LMS
-                latent_model_input = latent_model_input / ((sigma**2 + 1) ** 0.5)
-
-            # predict the noise residual
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=image_embeddings)["sample"]
-
-            # perform guidance
-            if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # compute the previous noisy sample x_t -> x_t-1
-            if isinstance(self.scheduler, LMSDiscreteScheduler):
-                latents = self.scheduler.step(noise_pred, i, latents, **extra_step_kwargs)["prev_sample"]
-            else:
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
-   
-            # scale and decode the image latents with vae
-            latents = 1 / 0.18215 * latents
-            image = self.vae.decode(latents)
-
-            image = (image["sample"] / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().permute(0, 2, 3, 1).numpy()
-            has_nsfw_concept = 0
-            if output_type == "pil":
-                image = self.numpy_to_pil(image)
-
-            return {"sample": image, "nsfw_content_detected": has_nsfw_concept}
-
-        else: 
-            # total= len(self.scheduler.timesteps[t_start:])):
-            intermediate_images=[] 
-            for i, t in tqdm(enumerate(self.scheduler.timesteps[t_start:]), ):
-                # expand the latents if doing classifier free guidance
-                latent_mdoel_input = torch.cat(
-                    [latents]*2) if do_classifier_free_guidance else latents
-
-                if isinstance(self.scheduler, LMSDiscreteScheduler): 
-                    sigma= self.scheduler.sigmas[i]
-                    latent_model_input= latent_model_input / ((sigma**2 +1)**0.5)
-
-                # predict the noise residual
-                noise_pred = self.unet(
-                    latent_mdoel_input, t, encoder_hidden_states=text_embeddings)['sample']
-
-                # Perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * \
-                        (noise_pred_text - noise_pred_uncond)
-                
-                # Compute the previous noisy smaple x_t --> x_t -1
-                if isinstance(self.scheduler, LMSDiscreteScheduler):
-                    latents = self.scheduler.step(noise_pred, i, latents, **extra_step_kwargs
-                    )["prev_sample"]
-                else: 
-                    latents = self.scheduler.step(
-                        noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
-                if return_intermediate: 
-                    decoded_image= decode_image(latents, self.vae)
-                    intermediate_images.append(self.numpy_to_pil(decoded_image))
-
-
-            # scale and decode the image latents with vae
-            has_nsfw_concept = None
-
-            if return_intermediate:
-                image = intermediate_images[-1]
-            else:
-                image = decode_image(latents, self.vae)
-                safety_cheker_input = self.feature_extractor(
-                    self.numpy_to_pil(image), return_tensors="pt"
-                ).to(self.device)
-                image, has_nsfw_concept = self.safety_checker(
-                    images=np.asarray(image), clip_input=safety_cheker_input.pixel_values
-                )
-                image = self.numpy_to_pil(image)
-
-            return {
-                "sample": image,
-                "nsfw_content_detected": has_nsfw_concept,
-                "intermediates": intermediate_images,
-                "time": time.time() - start_time,
-            }
 
 ###----------------- Stable Diffusion Inpainting  -----------------###
 class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
@@ -729,9 +446,241 @@ class StableDiffusionPipeline(DiffusionPipeline):
         }
 
 ###-----------------  Stable Diffusion Text2Image, Image2Image -----------------###
-## Using 
+## Using AIT for speeding up the inference process 
 class StableDiffusionPipelineAIT(DiffusionPipeline): 
-    pass
+    def __init__(self, 
+        vae: AutoencoderKL,
+        text_encoder: CLIPTextModel,
+        tokenizer: CLIPTokenizer,
+        unet: UNet2DConditionModel,
+        scheduler: Union[DDIMScheduler, PNDMScheduler, LMSDiscreteScheduler],
+        safety_checker: StableDiffusionSafetyChecker,
+        feature_extractor: CLIPFeatureExtractor,
+        work_dir: str = "tmp/", 
+    ): 
+        super().__init__(vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor)
+        self.work_dir = work_dir
+    
+    self.clip_ait_exe = self.init_ait_module(model_name="CLIPTextModel")
+    self.vae_ait_exe = self.init_ait_module(model_name="AutoencoderKL")
+    self.unet_ait_exe = self.init_ait_module(model_name="UNet2DConditionModel")
+
+    def init_ait_model(self, model_name): 
+        mod = Model(os.path.join(self.work_dir, model_name, "test.so"))
+        return mod
+    
+    def unet_inference(self, latent_model_input, timesteps, encoder_hidden_states): 
+        exe_module= self.unet_ait_exe
+        timesteps_pt=  timesteps.expand(latent_model_input.shape[0])
+        inputs={
+            "input0":  latent_model_input.permute((0, 2, 3, 1)) 
+            .contiguous()
+            .cuda()
+            .half(),
+            "input1": timesteps_pt.cuda().half(),
+            "input2": encoder_hidden_states.cuda().half(),
+        }
+        ys=[] 
+        num_outputs=len(exe_module.get_output_name_to_index_map())
+        for i in range(num_outputs): 
+            shape = exe_module.get_output_maximum_shape(i)
+            ys.append(torch.empty(shape).cuda().half())
+        exe_module.run_with_tensors(inputs, ys, graph_mode= True)
+        noise_pred= ys[0].permute((0, 3, 1, 2)).float()
+        return noise_pred 
+    
+    def clip_inference(self, input_ids, seqlen=64): 
+        exe_module= self.clip_ait_exe
+        bs = input_ids.shape[0]
+        position_ids = torch.arange(seqlen).expand((bs, -1)).cuda()
+        inputs={
+            "input0": input_ids,
+            "input1": position_ids,
+        }
+        ys = []
+        num_ouputs = len(exe_module.get_output_name_to_index_map())
+        for i in range(num_ouputs):
+            shape = exe_module.get_output_maximum_shape(i)
+            ys.append(torch.empty(shape).cuda().half())
+        exe_module.run_with_tensors(inputs, ys, graph_mode=True)
+        return ys[0].float()
+    
+    def vae_inference(self, vae_input):
+            exe_module = self.vae_ait_exe
+            inputs = [torch.permute(vae_input, (0, 2, 3, 1)).contiguous().cuda().half()]
+            ys = []
+            num_ouputs = len(exe_module.get_output_name_to_index_map())
+            for i in range(num_ouputs):
+                shape = exe_module.get_output_maximum_shape(i)
+                ys.append(torch.empty(shape).cuda().half())
+            exe_module.run_with_tensors(inputs, ys, graph_mode=True)
+            vae_out = ys[0].permute((0, 3, 1, 2)).float()
+            return vae_out
+    
+    @torch.no_grad()
+    def __call__(
+        self,
+        prompt: Union[str, List[str]],
+        height: Optional[int] = 512,
+        width: Optional[int] = 512,
+        num_inference_steps: Optional[int] = 50,
+        guidance_scale: Optional[float] = 7.5,
+        eta: Optional[float] = 0.0,
+        generator: Optional[torch.Generator] = None,
+        latents: Optional[torch.FloatTensor] = None,
+        output_type: Optional[str] = "pil",
+        return_dict: bool = True,
+        **kwargs,
+    ):
+        if "torch_device" in kwargs:
+            device = kwargs.pop("torch_device")
+            warnings.warn(
+                "`torch_device` is deprecated as an input argument to `__call__` and will be removed in v0.3.0."
+                " Consider using `pipe.to(torch_device)` instead."
+            )
+
+            # Set device as before (to be removed in 0.3.0)
+            if device is None:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.to(device)
+
+        if isinstance(prompt, str):
+            batch_size = 1
+        elif isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            raise ValueError(
+                f"`prompt` has to be of type `str` or `list` but is {type(prompt)}"
+            )
+
+        if height % 8 != 0 or width % 8 != 0:
+            raise ValueError(
+                f"`height` and `width` have to be divisible by 8 but are {height} and {width}."
+            )
+        
+        # get prompt text embeddings
+        text_input = self.tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=64,  # self.tokenizer.model_max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        
+        text_embeddings = self.clip_inference(text_input.input_ids.to(self.device))
+        # corresponds to doing no classifier free guidance.
+        do_classifier_free_guidance = guidance_scale > 1.0
+        # get unconditional embeddings for classifier free guidance
+        if do_classifier_free_guidance:
+            max_length = text_input.input_ids.shape[-1]
+            uncond_input = self.tokenizer(
+                [""] * batch_size,
+                padding="max_length",
+                max_length=max_length,
+                return_tensors="pt",
+            )
+            uncond_embeddings = self.clip_inference(
+                uncond_input.input_ids.to(self.device)
+            )
+            # to avoid doing two forward passes
+            text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+        # However this currently doesn't work in `mps`.
+        latents_device = "cpu" if self.device.type == "mps" else self.device
+        latents_shape = (batch_size, self.unet.in_channels, height // 8, width // 8)
+        if latents is None:
+            latents = torch.randn(
+                latents_shape,
+                generator=generator,
+                device=latents_device,
+            )
+        else:
+            if latents.shape != latents_shape:
+                raise ValueError(
+                    f"Unexpected latents shape, got {latents.shape}, expected {latents_shape}"
+                )
+        latents = latents.to(self.device)
+
+        # set timesteps
+        accepts_offset = "offset" in set(
+            inspect.signature(self.scheduler.set_timesteps).parameters.keys()
+        )
+        extra_set_kwargs = {}
+        if accepts_offset:
+            extra_set_kwargs["offset"] = 1
+
+        self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
+
+        # if we use LMSDiscreteScheduler, let's make sure latents are multiplied by sigmas
+        if isinstance(self.scheduler, LMSDiscreteScheduler):
+            latents = latents * self.scheduler.sigmas[0]
+
+        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
+        # eta corresponds to η in DDIM paper: https://arxiv.org/abs/2010.02502
+        # and should be between [0, 1]
+        accepts_eta = "eta" in set(
+            inspect.signature(self.scheduler.step).parameters.keys()
+        )
+        extra_step_kwargs = {}
+        if accepts_eta:
+            extra_step_kwargs["eta"] = eta
+
+        for i, t in enumerate(self.progress_bar(self.scheduler.timesteps)):
+            # expand the latents if we are doing classifier free guidance
+            latent_model_input = (
+                torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+            )
+            if isinstance(self.scheduler, LMSDiscreteScheduler):
+                sigma = self.scheduler.sigmas[i]
+                # the model input needs to be scaled to match the continuous ODE formulation in K-LMS
+                latent_model_input = latent_model_input / ((sigma**2 + 1) ** 0.5)
+
+            # predict the noise residual
+            noise_pred = self.unet_inference(
+                latent_model_input, t, encoder_hidden_states=text_embeddings
+            )
+
+            # perform guidance
+            if do_classifier_free_guidance:
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + guidance_scale * (
+                    noise_pred_text - noise_pred_uncond
+                )
+
+            # compute the previous noisy sample x_t -> x_t-1
+            if isinstance(self.scheduler, LMSDiscreteScheduler):
+                latents = self.scheduler.step(
+                    noise_pred, i, latents, **extra_step_kwargs
+                ).prev_sample
+            else:
+                latents = self.scheduler.step(
+                    noise_pred, t, latents, **extra_step_kwargs
+                ).prev_sample
+
+        # scale and decode the image latents with vae
+        latents = 1 / 0.18215 * latents
+        image = self.vae_inference(latents)
+
+        image = (image / 2 + 0.5).clamp(0, 1)
+        image = image.cpu().permute(0, 2, 3, 1).numpy()
+
+        # run safety checker
+        safety_cheker_input = self.feature_extractor(
+            self.numpy_to_pil(image), return_tensors="pt"
+        ).to(self.device)
+        image, has_nsfw_concept = self.safety_checker(
+            images=image, clip_input=safety_cheker_input.pixel_values
+        )
+
+        if output_type == "pil":
+            image = self.numpy_to_pil(image)
+
+        if not return_dict:
+            return (image, has_nsfw_concept)
+
+        return StableDiffusionPipelineOutput(
+            images=image, nsfw_content_detected=has_nsfw_concept
+        )
     ## Continue to Build the pipeline for speeding the inference process of the model
 
 ###----------------- Stable Diffusion Text2Video -----------------###
