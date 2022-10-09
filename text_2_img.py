@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 import torch
 import gradio as gr
-from stable_diffusion_model import StableDiffusionInpaintingPipeline_, StableDiffusionPipeline, StableDiffusionCLIP_Guided
+from stable_diffusion_model import StableDiffusionInpaintingPipeline_, StableDiffusionPipeline, StableDiffusionCLIP_Guided, StableDiffusionPipelineAIT
 from torchvision import transforms
 import PIL
 from pathlib import Path
@@ -25,6 +25,7 @@ import os
 from diffusers import LMSDiscreteScheduler
 from transformers import CLIPFeatureExtractor, CLIPModel
 import random 
+import time 
 #os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # Using original stable diffusion pipeline
 
@@ -156,7 +157,7 @@ def dalle_to_SD(prompt, image_width, image_height, samples_num, step_num, scale,
 # ---------------------------------------------------------
 # Section 2 Stable Diffusion Model text_2_image
 # ---------------------------------------------------------
-def text_2_image(prompt):
+def text_2_image(prompt, path):
     pipeimg = StableDiffusionPipeline.from_pretrained(
         "CompVis/stable-diffusion-v1-4", revision="fp16",
         torch_dtype=torch.float16,
@@ -168,6 +169,7 @@ def text_2_image(prompt):
     num_inference_steps = 80
     guidance_scale = 7.5
     # with torch.cuda.amp.autocast():
+    start_time = time.time()
     with torch.autocast("cuda"):
         outputs = pipeimg(prompt=[prompt]*samples_num,
                           mode=mode,
@@ -182,13 +184,43 @@ def text_2_image(prompt):
                           )
 
     images = outputs["sample"]
-    time_inference = outputs["time"]
-    images[0].save("./Bird_images/"+prompt.replace(" ", "_") +
-                   "SD_text_2_image"+".jpg")
-    print("The inference time is : ", time_inference)
+    #time_inference = outputs["time"]
+    #print("The inference time is : ", time_inference)
+    images[0].save(path  + "test_AiT"+ str(i) + ".jpg")
+  
+    print("--- Normal SD pipeline %s seconds ---" % (time.time() - start_time))
+   
     return images
 
 
+def text_2_image_AiT_inference(prompt, path):
+    img_pipe= StableDiffusionPipelineAIT.from_pretrained("CompVis/stable-diffusion-v1-4", revision="fp16",
+        torch_dtype=torch.float16,
+        use_auth_token=True,).to("cuda")
+    samples_num = 2
+    init_img = None
+    
+    num_inference_steps = 80
+    guidance_scale = 7.5
+    # with torch.cuda.amp.autocast():
+    start_time = time.time()
+    with torch.autocast("cuda"):
+        images = img_pipe(prompt=[prompt]*samples_num,
+                          height=512,
+                          width=512,
+                          num_inference_steps=num_inference_steps,
+                          guidance_scale=guidance_scale,
+                          # init_image=init_img,
+                          generator=generator,
+                          strength=0.8,
+                          return_intermediates=False,
+                          ).images[0]
+
+        images.save(path  + "test_AiT"+ str(i) + ".jpg")
+    
+    print("--- AiT SD pipeline %s seconds ---" % (time.time() - start_time))
+    
+    return images 
 #image = text_2_image(prompt)
 # text_2_image(prompt) Gradio App Demo
 # ---------------------------------------------------------
@@ -354,7 +386,8 @@ def SD_Clip_guied(prompt, num_samples=4, clip_prompt="", num_inference_steps=50,
             image.save(save_path  + "test_rand_seed"+ str(i) + ".jpg")
     return images
 
-path_save="/data1/coco_synthetic_CLIP_Guided_SD/"
-prompt="A busy city with buildings covered in paint in the style of moebius, james jean, painterly, yoshitaka amano, hiroshi yoshida, loish, painterly, and artgerm, illustration"
-imgs= SD_Clip_guied(prompt= prompt, save_path=path_save )
+# path_save="/data1/coco_synthetic_CLIP_Guided_SD/"
+# prompt="A busy city with buildings covered in paint in the style of moebius, james jean, painterly, yoshitaka amano, hiroshi yoshida, loish, painterly, and artgerm, illustration"
+# imgs= SD_Clip_guied(prompt= prompt, save_path=path_save )
+
 ###----------------- CLIP Guided Diffusion Continue -----------------###
