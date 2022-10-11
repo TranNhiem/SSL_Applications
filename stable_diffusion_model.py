@@ -46,7 +46,7 @@ generator = torch.Generator(device="cuda").manual_seed(1024) #random.randint(0,1
 
 def decode_image(latents, vae,): 
     latents= 1 / 0.18215 * latents 
-    image= vae.decode(latents)
+    image= vae.decode(latents).sample
     image= (image /2 +0.5).clamp(0,1)
     image= image.cpu().permute(0,2,3,1).numpy()
     return image 
@@ -320,7 +320,9 @@ class StableDiffusionPipeline(DiffusionPipeline):
                 init_image = preprocess_pil(init_image)
             # print(init_image.shape, generator, self.device)
             # encode the init image into latents and scale the latents
-            init_latents = self.vae.encode(init_image.to(self.device)).sample()
+            ## Update changing information is here: 
+            #https://github.com/huggingface/diffusers/releases/tag/v0.3.0
+            init_latents = self.vae.encode(init_image.to(self.device)).latent_dist.sample() ## .sample() --> .latent_dist.sample()
             init_latents = 0.18215 * init_latents
 
             # expand init_latents for batch_size
@@ -461,9 +463,9 @@ class StableDiffusionPipelineAIT(DiffusionPipeline):
         super().__init__(vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor)
         self.work_dir = work_dir
     
-    self.clip_ait_exe = self.init_ait_module(model_name="CLIPTextModel")
-    self.vae_ait_exe = self.init_ait_module(model_name="AutoencoderKL")
-    self.unet_ait_exe = self.init_ait_module(model_name="UNet2DConditionModel")
+        self.clip_ait_exe = self.init_ait_module(model_name="CLIPTextModel")
+        self.vae_ait_exe = self.init_ait_module(model_name="AutoencoderKL")
+        self.unet_ait_exe = self.init_ait_module(model_name="UNet2DConditionModel")
 
     def init_ait_model(self, model_name): 
         mod = Model(os.path.join(self.work_dir, model_name, "test.so"))

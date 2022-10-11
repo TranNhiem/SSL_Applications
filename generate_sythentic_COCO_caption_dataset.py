@@ -174,12 +174,13 @@ class COCO_synthetic_Dataset(Dataset):
         with open(path, 'w') as outfile:
             json.dump(self.new_json, outfile)
 
-# generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/')
-# ## CoCo Caption dataset Caption Length 566.747
-# print(generate_data.__len__())
-# for i in range(200000, 300000):
-#     generate_data.__getitem__(i)
-# print("------------------------ Done ------------------------")
+generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/', generate_mode="no_repeat")
+## CoCo Caption dataset Caption Length 566.747=
+print(generate_data.__len__())
+for i in range(10000, 300000):
+    generate_data.__getitem__(i)
+generate_data.save_json("/data1/coco_synthetic_Dalle_SD/coco_synthetic_150k_200k.json") 
+print("------------------------ Done ------------------------")
 
 class COCO_synthetic_Dalle_SD(Dataset): 
 
@@ -305,8 +306,8 @@ class COCO_synthetic_Dalle_SD(Dataset):
         with open(path, 'w') as outfile:
             json.dump(self.new_json, outfile)
 
-generate_data= COCO_synthetic_Dalle_SD(image_root='/data1/coco_synthetic_Dalle_SD/', ann_root='/data1/coco_synthetic_Dalle_SD/')
-for i in range(100000):
-    generate_data.__getitem__(i)
-print("------------------------ Done ------------------------")
-generate_data.save_json("/data1/coco_synthetic/coco_synthetic_100k.json")
+# generate_data= COCO_synthetic_Dalle_SD(image_root='/data1/coco_synthetic_Dalle_SD/', ann_root='/data1/coco_synthetic_Dalle_SD/')
+# for i in range(150000, 200000):
+#     generate_data.__getitem__(i)
+# print("------------------------ Done ------------------------")
+# generate_data.save_json("/data1/coco_synthetic_Dalle_SD/coco_synthetic_150k_200k.json")
