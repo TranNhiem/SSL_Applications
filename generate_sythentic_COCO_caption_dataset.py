@@ -47,7 +47,8 @@ class COCO_synthetic_Dataset(Dataset):
         image_root (string): Root directory for storing the generated images (ex: /data/coco_synthetic/)
         anno_root(string): directory for storing the human caption file from COCO Caption dataset
         '''
-        url = 'https://storage.googleapis.com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
+        url = 'https://storage.googleapis
+        .com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
         filename = 'coco_karpathy_train.json'
 
         Path(image_root + "val2014/").mkdir(parents=True, exist_ok=True)
@@ -174,12 +175,12 @@ class COCO_synthetic_Dataset(Dataset):
         with open(path, 'w') as outfile:
             json.dump(self.new_json, outfile)
 
-generate_data= COCO_synthetic_Dataset(image_root='/data/coco_synthetic/', ann_root='/data/coco_synthetic/', generate_mode="no_repeat")
+generate_data= COCO_synthetic_Dataset(image_root='/data1/coco_synthetic/', ann_root='/data1/coco_synthetic/', generate_mode="no_repeat")
 ## CoCo Caption dataset Caption Length 566.747=
 print(generate_data.__len__())
-for i in range(10000, 300000):
+for i in range(300000, 400000):
     generate_data.__getitem__(i)
-generate_data.save_json("/data1/coco_synthetic_Dalle_SD/coco_synthetic_150k_200k.json") 
+generate_data.save_json("/data1/coco_synthetic/coco_synthetic_300k_400k.json") 
 print("------------------------ Done ------------------------")
 
 class COCO_synthetic_Dalle_SD(Dataset): 
