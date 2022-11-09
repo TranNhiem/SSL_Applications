@@ -29,7 +29,7 @@ def preprocess_pil(image):
 
 ## Processing RGB image Handle image size for Small GPU V Ram
 def image_preprocess(image, full_resolution=False):
-    image = Image.fromarray(image)
+    #image = Image.fromarray(image)
     w, h = image.size
     
     ## Consider to comment these line keeping Full image resolution
@@ -53,7 +53,7 @@ def image_preprocess(image, full_resolution=False):
 
 
 def mask_processes(mask):
-    mask = Image.fromarray(mask)
+    #mask = Image.fromarray(mask)
     mask = mask.convert("L")
     w, h = mask.size
     if w > 512:

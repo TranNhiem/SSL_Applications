@@ -1,4 +1,13 @@
 # @TranNhiem 2022 09/05
+'''
+Update Reference for Image Inpainting with Diffusion Models
++ Runway model 
+https://huggingface.co/runwayml/stable-diffusion-inpainting 
+https://huggingface.co/spaces/runwayml/stable-diffusion-inpainting/tree/main 
+
+'''
+
+
 import gradio as gr
 
 import os
@@ -7,9 +16,10 @@ import random
 import torch
 from torch import autocast
 # import torchcsprng as csprng
-from stable_diffusion_model import StableDiffusionInpaintingPipeline_
+from stable_diffusion_model import  StableDiffusionInpaintingPipeline_
 from glob import glob
 from utils import mask_processes, image_preprocess
+from diffusers import LMSDiscreteScheduler, DiffusionPipeline
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # from huggingface_hub import notebook_login
@@ -21,11 +31,16 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 # device = torch.device(
 #     "cuda") if torch.cuda.is_available() else torch.device("cpu")
+lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
 
 pipeimg = StableDiffusionInpaintingPipeline_.from_pretrained(
-    "CompVis/stable-diffusion-v1-4", revision="fp16",
+    #"CompVis/stable-diffusion-v1-4",
+    "runwayml/stable-diffusion-v1-5", 
+    #"runwayml/stable-diffusion-inpainting",
+     revision="fp16",
     torch_dtype=torch.float16,
     use_auth_token=True,
+    #scheduler=lms,
 ).to("cuda")
 
 
@@ -41,36 +56,54 @@ example_dir = "/home/rick/code_spaces/SSL_Applications/Bird_images"
 
 def infer(prompt, img, samples_num, steps_num, scale, option):
 
-    if option == "Mask Sketch Area":
-        mask = 1 - mask_processes(img['mask'])
+    if option == "Background Area":
+        mask = (img['mask']).convert("RGB")
+        #mask = mask_processes(mask)
     else:
-        mask = mask_processes(img['mask'])
-    img = image_preprocess(img['image'])
+        mask = (img['mask']).convert("RGB")
+        #mask = 1 - mask_processes(mask)
+
+    image=(img['image']).convert("RGB")
+    #img = image_preprocess(image)
+
     print(prompt)
     # Generate image for the masking area with prompt
     # with autocast("cuda"):#"cuda"
     with torch.cuda.amp.autocast(dtype=torch.float16):
-        images = pipeimg([prompt]*samples_num, init_image=img, mask_image=mask,
+        images = pipeimg([prompt]*samples_num, image=image, mask_image=mask,
                          num_inference_steps=steps_num, guidance_scale=scale, generator=generator)["sample"]  # generator=generator
     return images
 
+def read_content(file_path: str) -> str:
+    """read the content of target file
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    return content
 block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
 with block as demo:
     gr.Markdown(
-        "<h1><center> Image Inpainting App </center></h1> Different image resolutions should be 'working'")
-
-    gr.Markdown(
-        "<h3><center> Illustration How to use this App </center></h3> https://youtu.be/q5kAOi-edoY ")
-
+        "<h1><center> Image Inpainting 🎨 - 🖼️ </center></h1>")
+    gr.HTML(
+                """
+                    <div class="footer">
+                        <p> INSTRUCTION to USE this App <a href=" https://youtu.be/q5kAOi-edoY" style="text-decoration: underline;" target="_blank"> Video Link </a> 
+                        </p>
+                    </div> 
+                """
+            )
     with gr.Group():
         with gr.Box():
             with gr.Row().style(mobile_collapse=False, equal_height=True):
-                text = gr.Textbox(label="Inpainting with Your prompt", placeholder="Enter In-painting expected object here...", show_label=True, max_lines=1).style(
-                    border=(True, False, True, True),
-                    rounded=(True, False, False, True),
-                    container=False,)
-                btn = gr.Button("Run").style(
-                    margin=True, rounded=(True, True, True, True),)
+                with gr.Column(scale=4, min_width=900, min_height=600):
+                    text = gr.Textbox(label="Inpainting with Your text prompt", placeholder="Enter In-painting expected object here...", show_label=True, max_lines=1).style(
+                        border=(True, False, True, True),
+                        rounded=(True, False, False, True),
+                        container=False,)
+                with gr.Column(scale=4, min_width=150, min_height=600):
+                    btn = gr.Button("Run").style(
+                        margin=False, rounded=(True, True, True, True),)
 
         with gr.Row().style(mobile_collapse=False, equal_height=True):
             samples_num = gr.Slider(label="Number of Generated Image",
@@ -81,13 +114,12 @@ with block as demo:
                               maximum=30, value=7.5, step=0.1,)  # show_label=False
 
         with gr.Row().style(mobile_collapse=False, equal_height=True):
-            option = gr.Radio(label="Inpainting Area", default="Mask Sketch Area", choices=[
-                "Mask Sketch Area", "Background Area"], show_label=True)
-
-        image = gr.Image(source="upload", tool="sketch",
-                         label="Input image", type="numpy")
-        gallery = gr.Gallery(label="Generated images",
-                             show_label=True).style(grid=[2], height="auto")
+            # option = gr.Radio(label=" Selecting Inpainting Area", default="Mask Area", choices=[
+            #     "Mask Area", "Background Area"], show_label=True)
+            option = gr.Dropdown( ["Replacing Mask Area", "Replacing Background Area"],label=" Choosing Replacing Part", show_label=True)
+        
+        image = gr.Image(source="upload", tool="sketch",label="Input image", type="pil").style(height=400)
+        gallery = gr.Gallery(label="Generated images",show_label=True).style(grid=[2], height="auto")
         text.submit(fn=infer, inputs=[
                     text, image, samples_num, steps_num, scale, option], outputs=gallery)
 
@@ -97,7 +129,6 @@ with block as demo:
         # with gr.Row("20%"):
         #      gr.Markdown("#### (Illustration of Using This App):")
         #      gr.Image(f"{example_dir}/Rotating_earth_(large).gif", shape=(224, 224))
-
         # Using example images provide
         # with gr.Row("20%"):
         #     gr.Markdown("#### (Image Example):")
@@ -108,5 +139,5 @@ with block as demo:
         #     image = gr.Image(tool="sketch",label="Input image", type="numpy", value=str(ims_uri))#value=f"{example_dir}/343785.jpg") #source='upload',  # value=os.path.join(os.path.dirname(__file__),".jpg"
         #     gr.Examples(fn=infer, examples=[os.path.join(os.path.dirname(__file__)),image], inputs=[text, image, samples_num,steps_num, scale, option], outputs=gallery, cache_examples=True)
 
-demo.launch(server_name="140.115.53.102",  server_port=1111,
+demo.launch(server_name="0.0.0.0",  server_port=1234,
             share=True, enable_queue=True, )  # debug=True)

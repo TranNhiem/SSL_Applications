@@ -37,7 +37,7 @@ import random
 import open_clip
 from torchvision import transforms
 from torch.nn import functional as F
-from aitemplate.compiler import Model
+#from aitemplate.compiler import Model
 import os 
 import warnings
 
@@ -113,7 +113,9 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         # encode the init image into latents and scale the latents
 
         #print(init_image.shape)
-        init_latents = self.vae.encode(init_image.to(self.device)).sample()
+        #init_latents = self.vae.encode(init_image.to(self.device)).sample#sample()
+        init_latents = self.vae.encode(init_image.to(self.device)).latent_dist.sample() ## .sample() --> .latent_dist.sample()
+
         init_latents = 0.18215 * init_latents
         init_latents_orig = init_latents
 
@@ -217,8 +219,8 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
 
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
-        image = self.vae.decode(latents)
-
+        image= self.vae.decode(latents).sample 
+        #image = self.vae.decode(latents)
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
 
