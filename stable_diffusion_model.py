@@ -25,14 +25,19 @@ import time
 import PIL
 from PIL import Image
 from io import BytesIO
-from diffusers import AutoencoderKL, DDIMScheduler, DiffusionPipeline, PNDMScheduler, UNet2DConditionModel
+from diffusers.pipeline_utils import DiffusionPipeline
+from diffusers.models import AutoencoderKL, UNet2DConditionModel
+from diffusers.schedulers import DDIMScheduler, LMSDiscreteScheduler, PNDMScheduler
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import StableDiffusionPipelineOutput
+from diffusers.utils import deprecate
+from diffusers.configuration_utils import FrozenDict
+
 from tqdm.auto import tqdm
 import inspect
 from typing import List, Tuple, Dict, Any, Optional, Union
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer, CLIPModel 
-from utils import image_preprocess, preprocess_mask_v2, preprocess_pil, resize_feature, set_requires_grad
+from utils import image_preprocess, preprocess_mask_v2, preprocess_pil, resize_feature, set_requires_grad, prepare_mask_and_masked_image
 import random
 import open_clip
 from torchvision import transforms
@@ -53,7 +58,7 @@ def decode_image(latents, vae,):
 
 
 
-###----------------- Stable Diffusion Inpainting  -----------------###
+###----------------- Stable Diffusion Inpainting update for V< 0.4  -----------------###
 class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
     def __init__(
         self,
@@ -61,12 +66,42 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
         unet: UNet2DConditionModel,
-        scheduler: Union[DDIMScheduler, PNDMScheduler],
+        scheduler: Union[DDIMScheduler, LMSDiscreteScheduler, PNDMScheduler],
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPFeatureExtractor,
     ):
         super().__init__()
-        scheduler = scheduler.set_format("pt")
+        #scheduler = scheduler.set_format("pt")
+
+
+        if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 1:
+            deprecation_message = (
+                f"The configuration file of this scheduler: {scheduler} is outdated. `steps_offset`"
+                f" should be set to 1 instead of {scheduler.config.steps_offset}. Please make sure "
+                "to update the config accordingly as leaving `steps_offset` might led to incorrect results"
+                " in future versions. If you have downloaded this checkpoint from the Hugging Face Hub,"
+                " it would be very nice if you could open a Pull request for the `scheduler/scheduler_config.json`"
+                " file"
+            )
+            deprecate("steps_offset!=1", "1.0.0", deprecation_message, standard_warn=False)
+            new_config = dict(scheduler.config)
+            new_config["steps_offset"] = 1
+            scheduler._internal_dict = FrozenDict(new_config)
+
+        if hasattr(scheduler.config, "skip_prk_steps") and scheduler.config.skip_prk_steps is False:
+            deprecation_message = (
+                f"The configuration file of this scheduler: {scheduler} has not set the configuration"
+                " `skip_prk_steps`. `skip_prk_steps` should be set to True in the configuration file. Please make"
+                " sure to update the config accordingly as not setting `skip_prk_steps` in the config might lead to"
+                " incorrect results in future versions. If you have downloaded this checkpoint from the Hugging Face"
+                " Hub, it would be very nice if you could open a Pull request for the"
+                " `scheduler/scheduler_config.json` file"
+            )
+            deprecate("skip_prk_steps not set", "1.0.0", deprecation_message, standard_warn=False)
+            new_config = dict(scheduler.config)
+            new_config["skip_prk_steps"] = True
+            scheduler._internal_dict = FrozenDict(new_config)
+
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -81,7 +116,7 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
     def __call__(
         self,
         prompt: Union[str, List[str]],
-        init_image: torch.FloatTensor,
+        image: torch.FloatTensor,
         mask_image: torch.FloatTensor = None,
         strength: float = 0.75,
         num_inference_steps: Optional[int] = 50,
@@ -111,10 +146,20 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
 
         # encode the init image into latents and scale the latents
+        # get prompt text embeddings
+        text_input = self.tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
 
         #print(init_image.shape)
         #init_latents = self.vae.encode(init_image.to(self.device)).sample#sample()
-        init_latents = self.vae.encode(init_image.to(self.device)).latent_dist.sample() ## .sample() --> .latent_dist.sample()
+        image= image.to(deivce=self.device)
+        init_latents = self.vae.encode(image).latent_dist.sample(generator=generator) ## .sample() --> .latent_dist.sample()
 
         init_latents = 0.18215 * init_latents
         init_latents_orig = init_latents
@@ -146,16 +191,7 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
         init_latents = self.scheduler.add_noise(init_latents, noise, timesteps)
 
 
-        # get prompt text embeddings
-        text_input = self.tokenizer(
-            prompt,
-            padding="max_length",
-            max_length=self.tokenizer.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
-
+     
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
         # corresponds to doing no classifier free guidance.
@@ -234,6 +270,34 @@ class StableDiffusionInpaintingPipeline_(DiffusionPipeline):
             image = self.numpy_to_pil(image)
 
         return {"sample": image, "nsfw_content_detected": has_nsfw_concept}
+
+## --------------- Stable Diffusion Inpainting Update for V > 0.6-------------------- ###
+class StableDiffusionInpaintingPipeline_v2(DiffusionPipeline): 
+    def __init__(
+            self,
+            vae: AutoencoderKL,
+            text_encoder: CLIPTextModel,
+            tokenizer: CLIPTokenizer,
+            unet: UNet2DConditionModel,
+            scheduler: Union[DDIMScheduler, PNDMScheduler, LMSDiscreteScheduler],
+            safety_checker: StableDiffusionSafetyChecker,
+            feature_extractor: CLIPFeatureExtractor,
+        ):
+            super().__init__()
+            if hasattr(scheduler.config,"step_offset") and scheduler.config.steps_offset !=1: 
+                deprecation_message = (
+                    f"The configuration file of this scheduler: {scheduler} is outdated. `steps_offset`"
+                    f" should be set to 1 instead of {scheduler.config.steps_offset}. Please make sure "
+                    "to update the config accordingly as leaving `steps_offset` might led to incorrect results"
+                    " in future versions. If you have downloaded this checkpoint from the Hugging Face Hub,"
+                    " it would be very nice if you could open a Pull request for the `scheduler/scheduler_config.json`"
+                    " file"
+                )
+                deprecate("steps_offset!=1", "1.0.0", deprecation_message, standard_warn=False)
+                new_config = dict(scheduler.config)
+                new_config["steps_offset"] = 1
+                scheduler._internal_dict = FrozenDict(new_config)
+
 
 ###-----------------  Stable Diffusion Text2Image, Image2Image -----------------###
 class StableDiffusionPipeline(DiffusionPipeline):

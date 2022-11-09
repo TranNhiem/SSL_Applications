@@ -47,8 +47,7 @@ class COCO_synthetic_Dataset(Dataset):
         image_root (string): Root directory for storing the generated images (ex: /data/coco_synthetic/)
         anno_root(string): directory for storing the human caption file from COCO Caption dataset
         '''
-        url = 'https://storage.googleapis
-        .com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
+        url = 'https://storage.googleapis.com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
         filename = 'coco_karpathy_train.json'
 
         Path(image_root + "val2014/").mkdir(parents=True, exist_ok=True)

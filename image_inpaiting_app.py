@@ -17,6 +17,8 @@ import torch
 from torch import autocast
 # import torchcsprng as csprng
 from stable_diffusion_model import  StableDiffusionInpaintingPipeline_
+from diffusers.pipelines.stable_diffusion import StableDiffusionInpaintPipeline
+
 from glob import glob
 from utils import mask_processes, image_preprocess
 from diffusers import LMSDiscreteScheduler, DiffusionPipeline
@@ -33,14 +35,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 #     "cuda") if torch.cuda.is_available() else torch.device("cpu")
 lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
 
-pipeimg = StableDiffusionInpaintingPipeline_.from_pretrained(
+pipeimg = StableDiffusionInpaintPipeline.from_pretrained(
     #"CompVis/stable-diffusion-v1-4",
     "runwayml/stable-diffusion-v1-5", 
     #"runwayml/stable-diffusion-inpainting",
      revision="fp16",
     torch_dtype=torch.float16,
     use_auth_token=True,
-    #scheduler=lms,
+    scheduler=lms,
 ).to("cuda")
 
 
@@ -57,14 +59,15 @@ example_dir = "/home/rick/code_spaces/SSL_Applications/Bird_images"
 def infer(prompt, img, samples_num, steps_num, scale, option):
 
     if option == "Background Area":
-        mask = (img['mask']).convert("RGB")
-        #mask = mask_processes(mask)
+        mask = (img['mask'])#.convert("RGB")
+        #mask = mask_processes(img['mask'])
     else:
-        mask = (img['mask']).convert("RGB")
-        #mask = 1 - mask_processes(mask)
+        mask = (img['mask'])#.convert("RGB")
+        #mask = 1 - mask_processes(img['mask'])
 
-    image=(img['image']).convert("RGB")
-    #img = image_preprocess(image)
+    #
+    image=(img['image'])#.convert("RGB")
+    #image = image_preprocess(img['image'])
 
     print(prompt)
     # Generate image for the masking area with prompt
@@ -139,5 +142,5 @@ with block as demo:
         #     image = gr.Image(tool="sketch",label="Input image", type="numpy", value=str(ims_uri))#value=f"{example_dir}/343785.jpg") #source='upload',  # value=os.path.join(os.path.dirname(__file__),".jpg"
         #     gr.Examples(fn=infer, examples=[os.path.join(os.path.dirname(__file__)),image], inputs=[text, image, samples_num,steps_num, scale, option], outputs=gallery, cache_examples=True)
 
-demo.launch(server_name="0.0.0.0",  server_port=1234,
+demo.launch(server_name="0.0.0.0",  server_port=12345,
             share=True, enable_queue=True, )  # debug=True)

@@ -29,7 +29,7 @@ def preprocess_pil(image):
 
 ## Processing RGB image Handle image size for Small GPU V Ram
 def image_preprocess(image, full_resolution=False):
-    #image = Image.fromarray(image)
+    image = Image.fromarray(image)
     w, h = image.size
     
     ## Consider to comment these line keeping Full image resolution
@@ -53,7 +53,7 @@ def image_preprocess(image, full_resolution=False):
 
 
 def mask_processes(mask):
-    #mask = Image.fromarray(mask)
+    mask = Image.fromarray(mask)
     mask = mask.convert("L")
     w, h = mask.size
     if w > 512:
@@ -74,6 +74,26 @@ def mask_processes(mask):
     mask[np.where(mask != 0.0)] = 1.0  # using bool to find the uer drawed
     mask = torch.from_numpy(mask)
     return mask
+
+
+def prepare_mask_and_masked_image(image, mask):
+    #image = np.array(image.convert("RGB"))
+    image = Image.fromarray(image)
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image).to(dtype=torch.float32) / 127.5 - 1.0
+    ## Adding new line code.
+    mask = Image.fromarray(mask)
+    
+    mask = np.array(mask.convert("L"))
+    mask = mask.astype(np.float32) / 255.0
+    mask = mask[None, None]
+    mask[mask < 0.5] = 0
+    mask[mask >= 0.5] = 1
+    mask = torch.from_numpy(mask)
+
+    masked_image = image * (mask < 0.5)
+
+    return mask, masked_image
 
 # @dataclass
 # class GeneratorConfig:
