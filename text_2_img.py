@@ -192,7 +192,8 @@ def text_2_image(prompt, path):
    
     return images
 
-
+#image = text_2_image(prompt)
+# text_2_image(prompt) Gradio App Demo
 def text_2_image_AiT_inference(prompt, path):
     img_pipe= StableDiffusionPipelineAIT.from_pretrained("CompVis/stable-diffusion-v1-4", revision="fp16",
         torch_dtype=torch.float16,
@@ -215,14 +216,15 @@ def text_2_image_AiT_inference(prompt, path):
                           strength=0.8,
                           return_intermediates=False,
                           ).images[0]
-
-        images.save(path  + "test_AiT"+ str(i) + ".jpg")
+        Path(path).mkdir(parents=True, exist_ok=True)
+        images.save(path  + "test_AiT" + ".jpg")
     
     print("--- AiT SD pipeline %s seconds ---" % (time.time() - start_time))
     
     return images 
-#image = text_2_image(prompt)
-# text_2_image(prompt) Gradio App Demo
+prompt='A busy city with buildings covered in paint in the style of moebius, james jean, painterly, yoshitaka amano, hiroshi yoshida, loish, painterly, and artgerm, illustration'
+image = text_2_image_AiT_inference(prompt, path="/data/coco_synthetic/AIT_Template/")
+
 # ---------------------------------------------------------
 # def text_2_image_gradio():
 block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")

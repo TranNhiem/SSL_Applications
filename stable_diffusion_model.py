@@ -458,16 +458,23 @@ class StableDiffusionPipelineAIT(DiffusionPipeline):
         scheduler: Union[DDIMScheduler, PNDMScheduler, LMSDiscreteScheduler],
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPFeatureExtractor,
-        work_dir: str = "tmp/", 
+        work_dir: str = "/home/harry/BLIRL/SSL_Applications/tmp/", 
     ): 
-        super().__init__(vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor)
+        super().__init__()#vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor
+        # self.register_modules(
+        #     vae=vae,
+        #     text_encoder=text_encoder,
+        #     tokenizer=tokenizer,
+        #     unet=unet,
+        #     scheduler=scheduler,
+        #     feature_extractor=feature_extractor,
+        # )
         self.work_dir = work_dir
-    
         self.clip_ait_exe = self.init_ait_module(model_name="CLIPTextModel")
         self.vae_ait_exe = self.init_ait_module(model_name="AutoencoderKL")
         self.unet_ait_exe = self.init_ait_module(model_name="UNet2DConditionModel")
 
-    def init_ait_model(self, model_name): 
+    def init_ait_module(self, model_name): 
         mod = Model(os.path.join(self.work_dir, model_name, "test.so"))
         return mod
     
