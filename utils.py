@@ -76,15 +76,32 @@ def mask_processes(mask):
     return mask
 
 
-def prepare_mask_and_masked_image(image, mask):
-    #image = np.array(image.convert("RGB"))
+def prepare_image_and_masked_image(image, mask):
+
+    # w, h = mask.size
+    # if w > 512:
+    #         h = int(h * (512/w))
+    #         w = 512
+    # if h > 512:
+    #     w = int(w*(512/h))
+    #     h = 512
+    #     w, h = map(lambda x: x - x % 64, (w, h))
+    #     w //= 8
+    #     h //= 8
+
+
     image = Image.fromarray(image)
+    image = np.array(image.convert("RGB"))
+     ## Adding reize the image 
+    # image = image.resize((w, h), resample=PIL.Image.LANCZOS)
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image).to(dtype=torch.float32) / 127.5 - 1.0
-    ## Adding new line code.
-    mask = Image.fromarray(mask)
     
+    
+    mask = Image.fromarray(mask)
     mask = np.array(mask.convert("L"))
+    ## Adding reize the mask image 
+    # mask = mask.resize((w, h), resample=PIL.Image.LANCZOS)
     mask = mask.astype(np.float32) / 255.0
     mask = mask[None, None]
     mask[mask < 0.5] = 0
