@@ -1,3 +1,34 @@
+
+# @TranNhiem 2022 11/05
+'''
+Features Design include:
+1.. Creating MASK using brush to draw mask or creating mask using ClipSeg model () 
+2.. Text to Image Inpainting (Mask area or Background area)
+3.. Prompting Using Language model for create prompt or User prompt input. 
+4.. Creating Plugin exmaple style of Prompt and Upsampling for Inpainiting.
+
+## Installations requirements 
+!pip install -qq -U diffusers==0.6.0 transformers ftfy gradio
+!pip install git+https://github.com/huggingface/diffusers.git
+
+## Reference for Image Generation checkpoint model
+Update Reference for Image Inpainting with Diffusion Models
+https://huggingface.co/runwayml/stable-diffusion-inpainting 
+https://huggingface.co/spaces/runwayml/stable-diffusion-inpainting/tree/main 
+
+
+Note: You must comment these line of code from line 43 --> 49 of diffusers versio 0.6.0
+    # mask = Image.fromarray(mask)
+    # mask = np.array(mask.convert("L"))
+    # mask = mask.astype(np.float32) / 255.0
+    # mask = mask[None, None]
+    # mask[mask < 0.5] = 0
+    # mask[mask >= 0.5] = 1
+    # mask = torch.from_numpy(mask)
+   
+"/anaconda/envs/solo_learn/lib/python3.10/site-packages/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_inpaint.py"
+'''
+ 
 import os
 import sys 
 import random
