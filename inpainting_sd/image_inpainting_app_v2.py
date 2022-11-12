@@ -284,7 +284,7 @@ def run_demo():
             )
             
         
-    demo.launch()  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
+    demo.launch(share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
 if __name__ == '__main__':
 
