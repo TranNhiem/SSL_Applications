@@ -17,6 +17,7 @@ import gc
 import math
 from loading_concept_image import PromptDataset, DreamBoothDataset 
 from pathlib import Path
+import os 
 from diffusers import AutoencoderKL, DDPMScheduler, PNDMScheduler, StableDiffusionPipeline, UNet2DConditionModel 
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 from tqdm.auto import tqdm
@@ -26,8 +27,15 @@ from accelerate.logging import get_logger
 import torch 
 import torch.nn.functional as F
 from argparse import Namespace
-
+from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 import bitsandbytes as bnb
+
+
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+device = torch.device(
+    "cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+
 ##----------------- Temporal Setting Hyperparameters -----------------##
 
 
@@ -41,7 +49,6 @@ import bitsandbytes as bnb
 ### instance prompt is a prompt that describes of what your object or style is, together with the initializer work "sks"
 instance_prompt = "a photo of sks rick" #@param {type:"string"}
 #@markdown Check the `prior_preservation` option if you would like class of the concept (e.g.: toy, dog, painting) is guaranteed to be preserved. This increases the quality and helps with generalization at the cost of training time
-
 prior_preservation_class_prompt = "a photo of a cat clay toy" #@param {type:"string"}
 sample_batch_size = 2
 prior_loss_weight = 0.5 ## weight for each concept class ex: cat_concept 0.1, dog_concept 0.1, toy_concept 0.8
@@ -50,13 +57,13 @@ class_data_root=prior_preservation_class_folder
 class_prompt=prior_preservation_class_prompt
 device="cuda"
 
-
 ##----------------- Generate Class Images if Not Provided -----------------##
 
 # "CompVis/stable-diffusion-v1-4",
 # "runwayml/stable-diffusion-v1-5"
 # "runwayml/stable-diffusion-inpainting",
-ouput_dir = Path("/data1/StableDiffusion/Dreambooth/").mkdir(parents=True, exist_ok=True)
+#output_dir = Path("/data1/StableDiffusion/Dreambooth/pretrained/").mkdir(parents=True, exist_ok=True)
+output_dir= "/data1/StableDiffusion/Dreambooth/pretrained/rick"
 data_path="/home/harry/BLIRL/SSL_Applications/Dreambooth/Rick/"
 pretrain_model_name_or_path="runwayml/stable-diffusion-v1-5"
 num_class_images = 12 
@@ -105,7 +112,7 @@ args=Namespace(
     instance_data_dir=data_path , 
     instance_prompt= instance_prompt, 
     learning_rate= 5e-6, 
-    max_train_steps= 450, 
+    max_train_steps= 600, 
     train_batch_size= 1, 
     gradient_accumulation_steps= 1,
     max_grad_norm= 1.0,
@@ -116,13 +123,13 @@ args=Namespace(
     class_data_dir= prior_preservation_class_folder, 
     class_prompt= prior_preservation_class_prompt,
     num_class_images= num_class_images,
-    output_dir=ouput_dir ,
+    output_dir=output_dir ,
     with_prior_preservation= prior_preservation,
     prior_preservation_class_folder= prior_preservation_class_folder,
     noise_schedule= "ddpm", #ddpm, pndms
 )
 
-def training_function(text_encoderm=text_encoder, vae=vae, unet=unet, tokenizer=tokenizer, args=args):
+def training_function(text_encoder =text_encoder, vae=vae, unet=unet, tokenizer=tokenizer, args=args):
     logger= get_logger(__name__)
     accelerator= Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, 
                                 mixed_precision=args.mixed_precision)
@@ -275,15 +282,14 @@ def training_function(text_encoderm=text_encoder, vae=vae, unet=unet, tokenizer=
             vae=vae,
             unet=accelerator.unwrap_model(unet),
             tokenizer=tokenizer,
-
             scheduler=PNDMScheduler(
                 beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", skip_prk_steps=True
-            ) if args.scheduler == "pndm" else None,
-            safety_checker=None,#StableDiffusionSafetyChecker.from_pretrained("CompVis/stable-diffusion-safety-checker"),
+            ) if args.noise_schedule == "ddpm" else None,
+            safety_checker=StableDiffusionSafetyChecker.from_pretrained("CompVis/stable-diffusion-safety-checker"),
             feature_extractor=CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32"),
         )
-        pipeline.save_pretrained(args.output_dir)
 
+        pipeline.save_pretrained(args.output_dir)
 
 
 if __name__ == '__main__':

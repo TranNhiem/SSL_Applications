@@ -47,6 +47,12 @@ from diffusers import LMSDiscreteScheduler
 from torchvision import transforms
 ## API for Language Translation Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+device = torch.device(
+    "cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+
+
 
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B")
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
