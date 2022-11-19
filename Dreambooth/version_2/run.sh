@@ -1,0 +1,25 @@
+export CUDA_VISIBLE_DEVICES=1,2
+accelerate launch --config_file /home/harry/BLIRL/SSL_Applications/Dreambooth/version_2/accelerate_config.yaml --main_process_port 12346 dreambooth.py \
+--pretrained_model_name_or_path="runwayml/stable-diffusion-v1-5" \
+--pretrained_vae_name_or_path="stabilityai/sd-vae-ft-mse"  \
+--output_dir "/data1/StableDiffusion/Dreambooth/prof_li"  \
+--revision="fp16" \
+--with_prior_preservation  \
+--with_prior_preservation \
+--prior_loss_weight=1.0 \
+--seed=1337 \
+--resolution=512 \
+--train_batch_size=5 \
+--train_text_encoder \
+--gradient_accumulation_steps=1 \
+--gradient_checkpointing \
+--use_8bit_adam  \
+--learning_rate=1e-6 \
+--lr_scheduler="cosine" \
+--lr_warmup_steps=500 \
+--num_class_images=100 \
+--sample_batch_size=4 \
+--max_train_steps=8000 \
+--save_interval=10000 \
+--save_sample_prompt="photo of zwx prof_li" \
+--concepts_list="concepts_list_profli.json" \
