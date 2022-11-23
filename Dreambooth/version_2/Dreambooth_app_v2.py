@@ -47,4 +47,4 @@ with gr.Blocks() as demo:
 
     run.click(inference, inputs=[prompt, negative_prompt, num_samples, height, width, num_inference_steps, guidance_scale], outputs=gallery)
 
-demo.launch(debug=True)
+demo.launch(server_name="0.0.0.0", server_port=2222, share=False )
