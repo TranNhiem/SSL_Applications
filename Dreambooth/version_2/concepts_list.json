@@ -3,6 +3,6 @@
         "instance_prompt": "photo of zwx rick",
         "class_prompt": "photo of a rick",
         "instance_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/Rick/",
-        "class_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/regularize_img/rick"
+        "class_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/regularize_img/Men"
     }
 ]

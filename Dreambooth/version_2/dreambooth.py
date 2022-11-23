@@ -395,6 +395,7 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{organization}/{model_id}"
 
 def main(args): 
+
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
     accelerator= Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -766,17 +767,22 @@ def main(args):
                     loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
                 
                 accelerator.backward(loss)
-                # if accelerator.sync_gradients:
-                #     params_to_clip = (
-                #         itertools.chain(unet.parameters(), text_encoder.parameters())
-                #         if args.train_text_encoder
-                #         else unet.parameters()
-                #     )
-                #     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                if accelerator.sync_gradients:
+                    params_to_clip = (
+                        itertools.chain(unet.parameters(), text_encoder.parameters())
+                        if args.train_text_encoder
+                        else unet.parameters()
+                    )
+                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 loss_avg.update(loss.detach_(), bsz)
+            
+            if accelerator.sync_gradients:
+                progress_bar.update(1)
+                global_step += 1
+
             if not global_step % args.log_interval:
                 logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                 progress_bar.set_postfix(**logs)

@@ -14,8 +14,7 @@ g_cuda.manual_seed(seed)
 
 # @title Load the model
 scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
-model_path= "/data1/StableDiffusion/Dreambooth/rick/sd_v14"
- 
+model_path= "/data1/StableDiffusion/Dreambooth/rick/new_regular/10000"
 pipe = StableDiffusionPipeline.from_pretrained(model_path, scheduler= scheduler, torch_dtype=torch.float16,).to("cuda")
 
 
@@ -33,7 +32,7 @@ def inference(prompt, negative_prompt, num_samples, height=512, width=512, num_i
 with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column():
-            prompt = gr.Textbox(label="Prompt", value="zwx rick in the beach enjoy the sunset time", placeholder="Typing: (what you want to edit in your image)..")
+            prompt = gr.Textbox(label="Prompt", value="portrait of an handsome looking zwx rick happy in running clothes, photo realistic, highly details, elegant, trending on art station, high quality, by gregory manchess, james gurney, james jean", placeholder="Typing: (what you want to edit in your image)..")
             negative_prompt= gr.Textbox(label="Negative Prompt", value="")
             run = gr.Button(value="Generate")
             with gr.Row(): 

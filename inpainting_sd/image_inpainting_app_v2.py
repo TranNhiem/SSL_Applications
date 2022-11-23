@@ -52,13 +52,15 @@ device = torch.device(
     "cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
+NLLB_path= "/data1/pretrained_weight/NLLB/distill_nllb_1.3B"
 
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B",cache_dir=NLLB_path )#cache_dir=NLLB_path
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", cache_dir=NLLB_path)
 
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B")
-tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
 ###--------------------------------
 ### Section for SD  Model 
 ###--------------------------------
+SD_path =  "/data1/pretrained_weight/NLLB/StableDiffusion"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
@@ -67,6 +69,7 @@ pipeimg = StableDiffusionInpaintPipeline.from_pretrained(
     "runwayml/stable-diffusion-inpainting",
     revision="fp16",
     torch_dtype=torch.float16,
+    cache_dir=SD_path
     #scheduler=lms,
     #use_auth_token=True,
 ).to("cuda")

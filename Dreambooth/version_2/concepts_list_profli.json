@@ -3,6 +3,6 @@
         "instance_prompt": "photo of zwx prof_li",
         "class_prompt": "photo of a prof_li",
         "instance_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/prof_li/",
-        "class_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/regularize_img/prof_li"
+        "class_data_dir": "/home/harry/BLIRL/SSL_Applications/Dreambooth/regularize_img/Men"
     }
 ]

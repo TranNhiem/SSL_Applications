@@ -23,8 +23,9 @@ g_cuda = torch.Generator(device='cuda')
 seed = 52362 #@param {type:"number"}
 g_cuda.manual_seed(seed)
 scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
+ouput_dir= "/data1/StableDiffusion/Dreambooth/rick/new_regular/10000/"
 
-ouput_dir ="/data1/StableDiffusion/Dreambooth/pretrained/rick_v2"
+#ouput_dir ="/data1/StableDiffusion/Dreambooth/pretrained/rick_v2"
 pipe = StableDiffusionPipeline.from_pretrained(ouput_dir, scheduler= scheduler, torch_dtype=torch.float16,).to("cuda")
 
 def inference(prompt, num_samples):
