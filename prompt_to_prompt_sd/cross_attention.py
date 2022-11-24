@@ -38,7 +38,7 @@ from transformers import CLIPModel, CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UNet2DConditionModel
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 import matplotlib.pyplot as plt
-from absl import flags
+
 
 from config import read_cfg
 
@@ -309,7 +309,7 @@ def aggregate_attention(prompts, attention_store: AttentionStore, res: int, from
 def show_cross_attention(prompts, attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
     tokens = tokenizer.encode(prompts[select])
     decoder = tokenizer.decode
-    attention_maps = aggregate_attention(attention_store, res, from_where, True, select)
+    attention_maps = aggregate_attention(prompts, attention_store, res, from_where, True, select)
     images = []
     for i in range(len(tokens)):
         image = attention_maps[:, :, i]
@@ -343,7 +343,7 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
         images, latent = run_and_display(prompts, EmptyControl(), latent=latent, run_baseline=False, generator=generator)
         print("with prompt-to-prompt")
     images, x_t = utils.text2image_ldm_stable(ldm_stable, controller, prompts, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE)
-    images.to(device)
-    x_t = x_t.to(device)
+    # images.to(device)
+    # x_t = x_t.to(device)
     utils.view_images(images)
     return images, x_t

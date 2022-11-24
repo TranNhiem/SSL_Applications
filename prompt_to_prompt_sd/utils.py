@@ -46,8 +46,6 @@ def view_images(images, num_rows=1, offset_ratio=0.02):
     pil_img = Image.fromarray(image_)
     display(pil_img)
 
-
-    
 def diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False):
     if low_resource:
         noise_pred_uncond = model.unet(latents, t, encoder_hidden_states=context[0])["sample"]
@@ -60,6 +58,7 @@ def diffusion_step(model, controller, latents, context, t, guidance_scale, low_r
     latents = model.scheduler.step(noise_pred, t, latents)["prev_sample"]
     latents = controller.step_callback(latents)
     return latents
+
 
 
 def latent2image(vae, latents):

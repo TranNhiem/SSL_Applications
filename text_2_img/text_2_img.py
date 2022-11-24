@@ -47,21 +47,26 @@ from diffusers import LMSDiscreteScheduler
 from torchvision import transforms
 ## API for Language Translation Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-device = torch.device(
-    "cuda") if torch.cuda.is_available() else torch.device("cpu")
+# os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
-nllb_model= "/data1/pretrained_weight/NLLB"
-SD_model="/data1/pretrained_weight/StableDiffusion"
 
+###--------------------------------
+### Translation Model 
+###--------------------------------
+nllb_model= "/data1/pretrained_weight/NLLB/"
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B",cache_dir=nllb_model )
-tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B", cache_dir=nllb_model)
+tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")# nllb_model= "/data1/pretrained_weight/NLLB/nllb-200-1.3B"
+#model = AutoModelForSeq2SeqLM.from_pretrained(nllb_model, cache_dir=nllb_model) 
+# tokenizer = AutoTokenizer.from_pretrained(token)
+
+
 ###--------------------------------
 ### Section for SD  Model 
 ###--------------------------------
-
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+SD_model="/data1/pretrained_weight/StableDiffusion"
 lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
 pipeimg = StableDiffusionPipeline.from_pretrained(
     "CompVis/stable-diffusion-v1-4",
@@ -135,18 +140,17 @@ def run_demo():
                 with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=200, min_height=600):
                         language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
-                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ],label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
+                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ], value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
                     
                     with gr.Column(scale=4, min_width=800, min_height=600):
-                        text = gr.Textbox(label="Your text prompt", placeholder="Typing: (what you want to edit in your image)..", show_label=True, max_lines=1).style(
+                        text = gr.Textbox(label="Your text prompt", placeholder="Typing:( what you want generate)..", show_label=True, max_lines=1).style(
                             border=(True, False, True, True),
                             rounded=(True, False, False, True),
                             container=False,)
                  
                     #with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=800, min_height=600):
-                        samples_num = gr.Slider(label="Number of Generated Image",
-                                                minimum=1, maximum=10, value=4, step=1,)  # show_label=False
+                        samples_num = gr.Slider(label="Number of Generated Image",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
 
 
                     with gr.Column(scale=4, min_width=100, min_height=300):

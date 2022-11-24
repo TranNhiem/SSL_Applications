@@ -18,7 +18,7 @@ def base_cfg():
     'image width.')
 
     flags.DEFINE_enum(
-        "sd_model", "CompVis/stable-diffusion-v1-4", [ "CompVis/stable-diffusion-v1-4","prompthero/openjourney","runwayml/stable-diffusion-v1-5" ], 
+        "sd_model", "prompthero/openjourney", [ "CompVis/stable-diffusion-v1-4","prompthero/openjourney","runwayml/stable-diffusion-v1-5" ], 
         'The pretrained SD Model from Huggingface')
     
     flags.DEFINE_string(
