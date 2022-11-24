@@ -72,7 +72,7 @@ pipeimg = StableDiffusionPipeline.from_pretrained(
     #scheduler=lms,
     #use_auth_token=True,
 ).to("cuda")
-pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
+# pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
 
 def dummy(images, **kwargs): return images, False
 pipeimg.safety_checker = dummy
@@ -234,8 +234,6 @@ def run_demo():
                 </div>
                 """
             )
-            
-        
     demo.launch(share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
 if __name__ == '__main__':

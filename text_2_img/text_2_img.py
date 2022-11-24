@@ -57,30 +57,15 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 ### Translation Model 
 ###--------------------------------
 nllb_model= "/data1/pretrained_weight/NLLB/"
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B",cache_dir=nllb_model )
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B",cache_dir=nllb_model ) #["facebook/nllb-200-distilled-1.3B"]
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")# nllb_model= "/data1/pretrained_weight/NLLB/nllb-200-1.3B"
 #model = AutoModelForSeq2SeqLM.from_pretrained(nllb_model, cache_dir=nllb_model) 
 # tokenizer = AutoTokenizer.from_pretrained(token)
 
 
-###--------------------------------
-### Section for SD  Model 
-###--------------------------------
-SD_model="/data1/pretrained_weight/StableDiffusion"
-lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-pipeimg = StableDiffusionPipeline.from_pretrained(
-    "CompVis/stable-diffusion-v1-4",
-    #"runwayml/stable-diffusion-inpainting",
-    revision="fp16",
-    torch_dtype=torch.float16,
-    cache_dir=SD_model,
-    #scheduler=lms,
-    #use_auth_token=True,
-).to("cuda")
-pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
 
 def dummy(images, **kwargs): return images, False
-pipeimg.safety_checker = dummy
+# pipeimg.safety_checker = dummy
 
 
 generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
@@ -93,43 +78,85 @@ def read_content(file_path: str) -> str:
 
     return content
 
-def infer(prompt_, samples_num, language_input,scale=7.5, steps_num=50, ): #option
-    ## Checking the Image Size then Resize image
-
-    source_langage={
-        
-        "🇱🇷 English": "eng_Latn",
-        "🇻🇳 Vietnamese": "vie_Latn", 
-        "🇹🇼 TraditionalChinese": "zho_Hant",
-        "🇨🇳 SimplifiedChinese": "zho_Hans",
-        "🇫🇷 French" : "fra_Latn",
-        "🇩🇪 German": "deu_Latn",
-        "🇲🇨 Indonesian": "ind_Latn",
-        "🇯🇵 Japanese": "jpn_Jpan",
-        "🇰🇷 Korean": "kor_Hang", 
-        "🇪🇸 Spanish": "spa_Latn", 
-        "🇹🇭 Thai": "tha_Thai",
-        "": "empty",
-    }
-
+def infer(prompt_, samples_num=4, model_id="Model-loại-1",scale=7.5, steps_num=50, ): #option
+    ##----------------------------------------
     ## Language Translation
-    if source_langage[language_input] != "English" and source_langage[language_input] != "empty":
-        translator_prompt = pipeline('translation', model=model, tokenizer=tokenizer, src_lang=source_langage[language_input], tgt_lang='eng_Latn', max_length = 400)
-        prompt= translator_prompt(prompt_)[0]
-        prompt_=prompt['translation_text']
-        print("Your English prompt translate from : ", prompt_)
+    ##----------------------------------------
+    # "🇱🇷 English": "eng_Latn",
+    # "🇻🇳 Vietnamese": "vie_Latn", 
 
-        prompt_= [prompt_]*samples_num
-    else:
-        
-        prompt_= [prompt_]*samples_num
-        print(prompt_)
+    model_id_={
+        "Model-loại-1": "prompthero/openjourney",
+        "Model-loại-2": "CompVis/stable-diffusion-v1-4",
+        "Model-loại-3": "runwayml/stable-diffusion-v1-5",
+
+    }
+    translator_prompt = pipeline('translation', model=model, tokenizer=tokenizer, src_lang="vie_Latn", tgt_lang='eng_Latn', max_length = 400)
+    prompt= translator_prompt(prompt_)[0]
+    prompt_=prompt['translation_text']
+    print("Your English prompt translate from : ", prompt_)
+    print(prompt_)
+    prompt_= [prompt_]*samples_num
+    
+    ###--------------------------------
+    ### Section for SD  Model 
+    ###--------------------------------
+    SD_model="/data1/pretrained_weight/StableDiffusion/"
+    lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
+    pipeimg = StableDiffusionPipeline.from_pretrained(
+        #"CompVis/stable-diffusion-v1-4",
+        model_id_[model_id],
+        #SD_model,
+        #"runwayml/stable-diffusion-inpainting",
+        #revision="fp16",
+        #torch_dtype=torch.float16,
+        cache_dir=SD_model,
+        scheduler=lms,
+        #use_auth_token=True,
+    ).to("cuda")
+    pipeimg.safety_checker = dummy
+
+    # pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
+
     # Generate image for the masking area with prompt
     with autocast("cuda"):#"cuda"
     # with torch.cuda.amp.autocast(dtype=torch.float16):
         images = pipeimg(prompt=prompt_,num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images
         #breakpoint()
         return images
+
+examples = [
+    [
+        'xe bán đồ ăn trên đường phố thành phố Hồ Chí Minh.',
+#        4,
+#        45,
+#        7,
+#        1024,
+    ],
+    [
+        'chân dung của Elon Musk, ảnh chân thực, chi tiết, thanh lịch, thịnh hành trên trạm nghệ thuật, chất lượng cao, bởi gregory manchess, james gurney, james jean', 
+#        4,
+#        45,
+#        7.5,
+#        1024,
+    ],
+    [
+        'Một lát bánh phô mai ceviche ngon tuyệt',
+#        4,
+#        45,
+#        7,
+#        1024,
+    ],
+
+
+    [
+        "Một cabin lớn trên đỉnh núi đầy nắng theo phong cách Dreamworks, artstation",
+#        4,
+#        45,
+#        7,
+#        1024,
+    ],
+]
 
 def run_demo(): 
     block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
@@ -139,33 +166,36 @@ def run_demo():
             with gr.Box():
                 with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=200, min_height=600):
-                        language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
-                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ], value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
+                        model_id = gr.Dropdown( ["Model-loại-1", "Model-loại-2", "Model-loại-3"], value="Model-loại-1", label="🤖 Loại model ", show_label=True)
                     
                     with gr.Column(scale=4, min_width=800, min_height=600):
-                        text = gr.Textbox(label="Your text prompt", placeholder="Typing:( what you want generate)..", show_label=True, max_lines=1).style(
+                        text = gr.Textbox(label="Nhập chữ để tạo ảnh", placeholder="Nhập chữ:(Bạn muốn tạo hình ảnh gì??)..", show_label=True, max_lines=1).style(
                             border=(True, False, True, True),
                             rounded=(True, False, False, True),
                             container=False,)
                  
                     #with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=800, min_height=600):
-                        samples_num = gr.Slider(label="Number of Generated Image",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
+                        samples_num = gr.Slider(label="Số lượng ảnh",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
 
 
                     with gr.Column(scale=4, min_width=100, min_height=300):
-                        btn = gr.Button("Run").style(
+                        btn = gr.Button("Tạo ảnh").style(
                             margin=False, rounded=(True, True, True, True),)
 
 
             with gr.Row().style(mobile_collapse=False,):#gallery
 
                 with gr.Column():  #scale=1, min_width=80, min_height=300
-                    gallery = gr.Gallery(label="Generated images",show_label=True).style(grid=[2], height="auto")
+                    gallery = gr.Gallery(label="Hình ảnh Output",show_label=True).style(grid=[2], height="auto")
+            
+            gr.Markdown("</center></h2>Ví dụ điển hình 📜 --> 🖼️. và Thông tin chi Tiết</center></h2>")
+            ex = gr.Examples(examples=examples, fn=infer, inputs=[text ], outputs=[gallery], cache_examples=False, postprocess=False)
+            #ex.dataset.headers = ["Ví dụ điển hình 📜  --> 🖼️."]
+            text.submit(infer, inputs=[text, samples_num, model_id, ], outputs=[gallery], postprocess=False)
+            btn.click(fn=infer, inputs=[text, samples_num, model_id, ], outputs=[gallery])
 
-            btn.click(fn=infer, inputs=[text, samples_num, language_input, ], outputs=[gallery])
-
-           
+            #gr.Markdown("<h2><center>Một số thông tin chi tiết.</center></h2>")
             gr.HTML(
                 """
                 <div class="footer">
@@ -181,11 +211,15 @@ def run_demo():
                             margin-bottom: 10px;
                             ">
                         <p style="align-items: center; margin-bottom: 7px;" >
-                            App Developer: @TranNhiem 🙋‍♂️ Connect with me on : 
+                            App Developer: @TranNhiem 🙋‍♂️ Kết nối với Nhiệm: 
                         <a href="https://www.linkedin.com/feed/" style="text-decoration: underline;" target="_blank"> 🙌 Linkedin</a> ;  
                             <a href="https://twitter.com/TranRick2" style="text-decoration: underline;" target="_blank"> 🙌 Twitter</a> ; 
                             <a href="https://www.facebook.com/jean.tran.336" style="text-decoration: underline;" target="_blank"> 🙌 Facebook</a> 
                         </p>
+                        <p style="align-items: center; margin-bottom: 7px;" >
+                        <a App này phát triển dựa trên Chuyển đỗi ngôn ngữ (Natural Language Translation) và Generative Model (StableDiffusion) để tạo ra hình ảnh từ chữ.</a>
+                        </p>
+                        
                         </div>
                     </div>
                     <div style="
@@ -196,15 +230,13 @@ def run_demo():
                         margin-bottom: 8px;
                         ">
                         </p> 
-                        <p style="align-items: center; margin-bottom: 5px;" >
-                        This App power Natural Language Translation and Text-To-Image Generation Model.
-                        </p> 
+
                         <p>
-                        1. Natural Language Translation Model power by NLLB-200
+                        1. Chuyển đỗi ngôn ngữ (Natural Language Translation) bởi NLLB-200
                         <a href="https://ai.facebook.com/research/no-language-left-behind/" style="text-decoration: underline;" target="_blank">NLLB</a>  
                         </p>
                         <p>
-                        2. Text-to-Image generative model power by Stable Diffusion 
+                        2. Model chữ tạo hình ảnh bởi Stable Diffusion 
                         <a href="https://huggingface.co/CompVis" style="text-decoration: underline;" target="_blank">CompVis</a> and 
                         <a href="https://huggingface.co/stabilityai" style="text-decoration: underline;" target="_blank">Stability AI</a> 
                         </p>
@@ -221,7 +253,7 @@ def run_demo():
             )
             
         
-    demo.launch(share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
+    demo.launch(server_name="140.215.75.98", server_port=2222, share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
 if __name__ == '__main__':
 
