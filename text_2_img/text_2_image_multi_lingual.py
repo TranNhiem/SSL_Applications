@@ -146,7 +146,7 @@ examples = [
     [
         'Photo of two black swans touching heads in a beautiful reflective mountain lake, a colorful hot air balloon is flying above the swans, hot air balloon, intricate, 8k highly professionally detailed, hdr, cgsociety',"🇱🇷 English", "Model-2"
         ],
-    ['Hình ảnh hai con thiên nga đen chạm đầu nhau trong một hồ nước trên núi phản chiếu tuyệt đẹp, một chiếc khinh khí cầu đầy màu sắc đang bay phía trên những con thiên nga, khinh khí cầu, phức tạp, 8k rất chi tiết chuyên nghiệp, hdr, cgsociety',"🇻🇳 Vietnamese",  "Model-2" ], 
+    ['Hình ảnh hai con thiên nga đen chạm đầu nhau trong một hồ nước trên núi phản chiếu tuyệt đẹp, một chiếc khinh khí cầu đầy màu sắc đang bay phía trên những con thiên nga, khinh khí cầu, 8k rất chi tiết chuyên nghiệp, hdr, cgsociety',"🇻🇳 Vietnamese",  "Model-2" ], 
     [
         '兩隻黑天鵝在美麗的反光山湖中碰頭的照片，一個彩色熱氣球在天鵝上方飛行，熱氣球，錯綜複雜，8k 高度專業詳細，hdr，cgsociety', "🇹🇼 TraditionalChinese", "Model-2",
         ],
@@ -182,22 +182,22 @@ def run_demo():
                 with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=100, min_height=600):
                         language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
-                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ], value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
+                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ], value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵, others", show_label=True)
             
-                    with gr.Column(scale=4, min_width=800, min_height=600):
+                    with gr.Column(scale=4, min_width=900, min_height=600):
                         text = gr.Textbox(label="Your text prompt", placeholder="Typing: (what you want to edit in your image)..", show_label=True, max_lines=1).style(
                             border=(True, False, True, True),
                             rounded=(True, False, False, True),
                             container=False,)
-                    
-                    with gr.Column(scale=4, min_width=100, min_height=600):
+                with gr.Row().style(mobile_collapse=False, equal_height=True):
+                    with gr.Column(scale=4, min_width=200, min_height=600):
                         model_id = gr.Dropdown( ["Model-1", "Model-2", "Model-3"], value="Model-2", label="🤖 Diffusion models ", show_label=True)
                     #with gr.Row().style(mobile_collapse=False, equal_height=True):
-                    with gr.Column(scale=4, min_width=800, min_height=600):
+                    with gr.Column(scale=4, min_width=500, min_height=600):
                         samples_num = gr.Slider(label="Number of Image",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
 
                     with gr.Column(scale=4, min_width=100, min_height=300):
-                        btn = gr.Button("Run").style(
+                        btn = gr.Button("Generate Images").style(
                             margin=False, rounded=(True, True, True, True),)
 
                 # option = gr.Radio(label=" Selecting Inpainting Area", default="Mask Area", choices=[

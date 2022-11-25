@@ -127,9 +127,10 @@ def infer(prompt_, samples_num=4, model_id="Model-loại-1",scale=7.5, steps_num
         #breakpoint()
         return images
 
+
 examples = [
     [
-        'xe bán đồ ăn trên đường phố thành phố Hồ Chí Minh.',
+        'Hình ảnh tuyệt đẹp các hòn đảo ở vịnh Hạ Long Bay Vietname, ảnh chi tiết, 4k, ảnh mang phong cách bởi,gregory manchess, james gurney, james jean'
 
     ],
     [
@@ -146,10 +147,6 @@ examples = [
 
     [
         "Một cabin lớn trên đỉnh núi đầy nắng theo phong cách Dreamworks, artstation",
-#        4,
-#        45,
-#        7,
-#        1024,
     ],
 ]
 
@@ -170,7 +167,7 @@ def run_demo():
                             container=False,)
                  
                     #with gr.Row().style(mobile_collapse=False, equal_height=True):
-                    with gr.Column(scale=4, min_width=800, min_height=600):
+                    with gr.Column(scale=4, min_width=400, min_height=600):
                         samples_num = gr.Slider(label="Số lượng ảnh",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
 
 
