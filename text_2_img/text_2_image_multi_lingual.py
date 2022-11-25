@@ -43,7 +43,7 @@ from torch import autocast
 #from diffusion_pipeline.sd_inpainting_pipeline import  StableDiffusionInpaintPipeline
 from diffusers import StableDiffusionPipeline
 from glob import glob
-from diffusers import LMSDiscreteScheduler
+from diffusers import LMSDiscreteScheduler, EulerDiscreteScheduler
 from torchvision import transforms
 ## API for Language Translation Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
@@ -62,20 +62,8 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B", ca
 ###--------------------------------
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-pipeimg = StableDiffusionPipeline.from_pretrained(
-    "CompVis/stable-diffusion-v1-4",
-    #"runwayml/stable-diffusion-inpainting",
-    revision="fp16",
-    torch_dtype=torch.float16,
-    cache_dir="",
-    #scheduler=lms,
-    #use_auth_token=True,
-).to("cuda")
-# pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
 
 def dummy(images, **kwargs): return images, False
-pipeimg.safety_checker = dummy
 
 
 generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
@@ -88,7 +76,7 @@ def read_content(file_path: str) -> str:
 
     return content
 
-def infer(prompt_, samples_num, steps_num, option, language_input,scale=7.5, resize_image_method="" ): #option
+def infer(prompt_, language_input, model_id, samples_num=4, steps_num=50, scale=7.5,): #option
     ## Checking the Image Size then Resize image
 
     source_langage={
@@ -104,11 +92,11 @@ def infer(prompt_, samples_num, steps_num, option, language_input,scale=7.5, res
         "🇰🇷 Korean": "kor_Hang", 
         "🇪🇸 Spanish": "spa_Latn", 
         "🇹🇭 Thai": "tha_Thai",
-        "": "empty",
+      
     }
 
     ## Language Translation
-    if source_langage[language_input] != "English" and source_langage[language_input] != "empty":
+    if source_langage[language_input] != "English":
         translator_prompt = pipeline('translation', model=model, tokenizer=tokenizer, src_lang=source_langage[language_input], tgt_lang='eng_Latn', max_length = 400)
         prompt= translator_prompt(prompt_)[0]
         prompt_=prompt['translation_text']
@@ -119,31 +107,95 @@ def infer(prompt_, samples_num, steps_num, option, language_input,scale=7.5, res
         
         prompt_= [prompt_]*samples_num
         print(prompt_)
+
+
+    model_id_={
+        "Model-1": "prompthero/openjourney",
+        "Model-2": "CompVis/stable-diffusion-v1-4",
+        "Model-3": "runwayml/stable-diffusion-v1-5",
+        #"Model-4": "stabilityai/stable-diffusion-2", 
+    }
+    # Generate image for the masking area with prompt
+    SD_model="/data1/pretrained_weight/StableDiffusion/"
+    LMSD = LMSDiscreteScheduler.from_config(model_id_[model_id], subfolder="scheduler")
+    Euler = EulerDiscreteScheduler.from_pretrained(model_id_[model_id], subfolder="scheduler", prediction_type="v_prediction")
+    pipeimg = StableDiffusionPipeline.from_pretrained(
+        #"CompVis/stable-diffusion-v1-4",
+        model_id_[model_id],
+        #SD_model,
+        #"runwayml/stable-diffusion-inpainting",
+        #revision="fp16",
+        torch_dtype=torch.float16,
+        cache_dir=SD_model,
+        scheduler=Euler,
+        #use_auth_token=True,
+    ).to("cuda")
+    #pipeimg.enable_xformers_memory_efficient_attention()
+    pipeimg.safety_checker = dummy
+
+    # pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
+
     # Generate image for the masking area with prompt
     with autocast("cuda"):#"cuda"
     # with torch.cuda.amp.autocast(dtype=torch.float16):
-        images = pipeimg(prompt=prompt_, image= image, mask_image=mask,height=h, width=w,
-                                num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images
+        images = pipeimg(prompt=prompt_,num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images
         #breakpoint()
         return images
+
+examples = [
+    [
+        'Photo of two black swans touching heads in a beautiful reflective mountain lake, a colorful hot air balloon is flying above the swans, hot air balloon, intricate, 8k highly professionally detailed, hdr, cgsociety',"🇱🇷 English", "Model-2"
+        ],
+    ['Hình ảnh hai con thiên nga đen chạm đầu nhau trong một hồ nước trên núi phản chiếu tuyệt đẹp, một chiếc khinh khí cầu đầy màu sắc đang bay phía trên những con thiên nga, khinh khí cầu, phức tạp, 8k rất chi tiết chuyên nghiệp, hdr, cgsociety',"🇻🇳 Vietnamese",  "Model-2" ], 
+    [
+        '兩隻黑天鵝在美麗的反光山湖中碰頭的照片，一個彩色熱氣球在天鵝上方飛行，熱氣球，錯綜複雜，8k 高度專業詳細，hdr，cgsociety', "🇹🇼 TraditionalChinese", "Model-2",
+        ],
+    [
+        '两只黑天鹅在美丽的反光山湖中碰头的照片，一个彩色热气球在天鹅上方飞行，热气球，错综复杂，8k 高度专业详细，hdr，cgsociety', "🇨🇳 SimplifiedChinese","Model-2", 
+        ],
+
+    [
+        "Photo de deux cygnes noirs touchant la tête dans un magnifique lac de montagne réfléchissant, une montgolfière colorée vole au-dessus des cygnes, montgolfière, complexe, 8k très professionnellement détaillée, hdr, cgsociety",  "🇫🇷 French", "Model-2"
+        ],
+    [
+        "Foto von zwei schwarzen Schwänen, die Köpfe in einem wunderschönen reflektierenden Bergsee berühren, ein bunter Heißluftballon fliegt über den Schwänen, Heißluftballon, kompliziert, 8k hochprofessionell detailliert, hdr, cgsociety", "🇩🇪 German", "Model-2"
+        ],
+    [
+        "Foto dua angsa hitam menyentuh kepala di danau gunung reflektif yang indah, balon udara panas berwarna-warni terbang di atas angsa, balon udara panas, rumit, detail 8k sangat profesional, hdr, cgsociety","🇲🇨 Indonesian", "Model-2"
+    ],
+    [
+        "美しい反射する山の湖で頭に触れる2羽の黒い白鳥の写真、カラフルな熱気球が白鳥の上を飛んでいる、熱気球、複雑、8kの非常に専門的に詳細な、hdr、cgsociety", "🇯🇵 Japanese", "Model-2"
+        ], 
+    [
+            "아름다운 반사 산 호수에서 두 개의 검은 백조가 머리를 만지는 사진, 화려한 열기구가 백조, 열기구, 복잡하고 전문적으로 상세한 8k, hdr, cgsociety","🇰🇷 Korean", "Model-2", 
+        ], 
+
+
+]
 
 def run_demo(): 
     block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
     with block as demo:
-        gr.HTML(read_content("header.html"))
+        gr.HTML(read_content("header_.html"))
         with gr.Group():
             with gr.Box():
                 with gr.Row().style(mobile_collapse=False, equal_height=True):
-                    with gr.Column(scale=4, min_width=200, min_height=600):
+                    with gr.Column(scale=4, min_width=100, min_height=600):
                         language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
-                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ],label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
-                    
+                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ], value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
+            
                     with gr.Column(scale=4, min_width=800, min_height=600):
                         text = gr.Textbox(label="Your text prompt", placeholder="Typing: (what you want to edit in your image)..", show_label=True, max_lines=1).style(
                             border=(True, False, True, True),
                             rounded=(True, False, False, True),
                             container=False,)
                     
+                    with gr.Column(scale=4, min_width=100, min_height=600):
+                        model_id = gr.Dropdown( ["Model-1", "Model-2", "Model-3"], value="Model-2", label="🤖 Diffusion models ", show_label=True)
+                    #with gr.Row().style(mobile_collapse=False, equal_height=True):
+                    with gr.Column(scale=4, min_width=800, min_height=600):
+                        samples_num = gr.Slider(label="Number of Image",minimum=1, maximum=10, value=4, step=1,)  # show_label=False
+
                     with gr.Column(scale=4, min_width=100, min_height=300):
                         btn = gr.Button("Run").style(
                             margin=False, rounded=(True, True, True, True),)
@@ -153,21 +205,6 @@ def run_demo():
 
             with gr.Row().style(mobile_collapse=False,):#gallery
 
-                with gr.Column():#scale=1, min_width=100, min_height=400
-                    with gr.Row():
-                        image = gr.Image(source="upload", tool="sketch",label="Input image",elem_id="image_upload", type="pil").style(height=400)
-                        #
-                    with gr.Row().style(mobile_collapse=False, equal_height=True):
-                          # with gr.Row().style(mobile_collapse=False, equal_height=True):
-                        option = gr.Dropdown( ["Mask Area", "Background Area"],label="Replacing Area", show_label=True)
-                        #resize_image_method = gr.Dropdown( ["BILINEAR","BICUBIC", "ANTIALIAS", "LANCZOS", "NEAREST"],label="Method Resize Image", show_label=True)
-                        samples_num = gr.Slider(label="Number of Generated Image",
-                                                minimum=1, maximum=10, value=1, step=1,)  # show_label=False
-                        steps_num = gr.Slider(label="Generatio of steps", minimum=10, maximum=200, value=50, step=5,)  # show_label=False
-                      
-                        # scale = gr.Slider(label="Guidance scale", minimum=0.0,
-                        #                 maximum=30, value=7.5, step=0.1,)  # show_label=False
-
                 with gr.Column():  #scale=1, min_width=80, min_height=300
                     gallery = gr.Gallery(label="Edited images",show_label=True).style(grid=[2], height="auto")
                     #image_out = gr.Image(label="Edited Image", elem_id="output-img").style(height=400)
@@ -176,8 +213,12 @@ def run_demo():
                         # loading_icon = gr.HTML(loading_icon_html, visible=False)
                         # share_button = gr.Button("Share to community", elem_id="share-btn", visible=False)
 
-            btn.click(fn=infer, inputs=[text, image, samples_num,
-                            steps_num, option, language_input, ], outputs=[gallery])
+ 
+            gr.Markdown("</center></h2> Prompts examples 📜 --> 🖼️. Models & Information Detail</center></h2>")
+            ex = gr.Examples(examples=examples, fn=infer, inputs=[text, language_input, model_id ], outputs=[gallery], cache_examples=False, postprocess=False)
+            text.submit(infer, inputs=[text,language_input, model_id,  samples_num,], outputs=[gallery], postprocess=False)
+
+            btn.click(fn=infer, inputs=[text, language_input, model_id, samples_num,], outputs=[gallery])
 
            
         
@@ -201,6 +242,10 @@ def run_demo():
                             <a href="https://twitter.com/TranRick2" style="text-decoration: underline;" target="_blank"> 🙌 Twitter</a> ; 
                             <a href="https://www.facebook.com/jean.tran.336" style="text-decoration: underline;" target="_blank"> 🙌 Facebook</a> 
                         </p>
+                        </p>
+                        <p style="align-items: center; margin-bottom: 7px;" >
+                        <a This app power by (Natural Language Translation) Text-2-Image Diffusion Generative Model (StableDiffusion).</a>
+                        </p>
                         </div>
                     </div>
                     <div style="
@@ -211,9 +256,7 @@ def run_demo():
                         margin-bottom: 8px;
                         ">
                         </p> 
-                        <p style="align-items: center; margin-bottom: 5px;" >
-                        This App power Natural Language Translation and Text-To-Image Generation Model.
-                        </p> 
+                        
                         <p>
                         1. Natural Language Translation Model power by NLLB-200
                         <a href="https://ai.facebook.com/research/no-language-left-behind/" style="text-decoration: underline;" target="_blank">NLLB</a>  

@@ -43,11 +43,13 @@ from torch import autocast
 #from diffusion_pipeline.sd_inpainting_pipeline import  StableDiffusionInpaintPipeline
 from diffusers import StableDiffusionPipeline
 from glob import glob
-from diffusers import LMSDiscreteScheduler
+from diffusers import LMSDiscreteScheduler, EulerDiscreteScheduler
 from torchvision import transforms
 ## API for Language Translation Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 # os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+# huggingface-cli login step 1
+# Token =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
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -67,9 +69,7 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")# n
 def dummy(images, **kwargs): return images, False
 # pipeimg.safety_checker = dummy
 
-
 generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
-
 def read_content(file_path: str) -> str:
     """read the content of target file
     """
@@ -89,7 +89,7 @@ def infer(prompt_, samples_num=4, model_id="Model-loại-1",scale=7.5, steps_num
         "Model-loại-1": "prompthero/openjourney",
         "Model-loại-2": "CompVis/stable-diffusion-v1-4",
         "Model-loại-3": "runwayml/stable-diffusion-v1-5",
-
+        "Model-loại-4": "stabilityai/stable-diffusion-2", 
     }
     translator_prompt = pipeline('translation', model=model, tokenizer=tokenizer, src_lang="vie_Latn", tgt_lang='eng_Latn', max_length = 400)
     prompt= translator_prompt(prompt_)[0]
@@ -102,18 +102,20 @@ def infer(prompt_, samples_num=4, model_id="Model-loại-1",scale=7.5, steps_num
     ### Section for SD  Model 
     ###--------------------------------
     SD_model="/data1/pretrained_weight/StableDiffusion/"
-    lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
+    LMSD = LMSDiscreteScheduler.from_config(model_id_[model_id], subfolder="scheduler")
+    Euler = EulerDiscreteScheduler.from_pretrained(model_id_[model_id], subfolder="scheduler", prediction_type="v_prediction")
     pipeimg = StableDiffusionPipeline.from_pretrained(
         #"CompVis/stable-diffusion-v1-4",
         model_id_[model_id],
         #SD_model,
         #"runwayml/stable-diffusion-inpainting",
         #revision="fp16",
-        #torch_dtype=torch.float16,
+        torch_dtype=torch.float16,
         cache_dir=SD_model,
-        scheduler=lms,
+        scheduler=Euler,
         #use_auth_token=True,
     ).to("cuda")
+    #pipeimg.enable_xformers_memory_efficient_attention()
     pipeimg.safety_checker = dummy
 
     # pipeimg.scheduler = LMSDiscreteScheduler.from_config(pipeimg.scheduler.config)
@@ -128,24 +130,17 @@ def infer(prompt_, samples_num=4, model_id="Model-loại-1",scale=7.5, steps_num
 examples = [
     [
         'xe bán đồ ăn trên đường phố thành phố Hồ Chí Minh.',
-#        4,
-#        45,
-#        7,
-#        1024,
+
     ],
     [
         'chân dung của Elon Musk, ảnh chân thực, chi tiết, thanh lịch, thịnh hành trên trạm nghệ thuật, chất lượng cao, bởi gregory manchess, james gurney, james jean', 
-#        4,
-#        45,
-#        7.5,
-#        1024,
+
+
     ],
     [
         'Một lát bánh phô mai ceviche ngon tuyệt',
-#        4,
-#        45,
-#        7,
-#        1024,
+
+
     ],
 
 
@@ -166,7 +161,7 @@ def run_demo():
             with gr.Box():
                 with gr.Row().style(mobile_collapse=False, equal_height=True):
                     with gr.Column(scale=4, min_width=200, min_height=600):
-                        model_id = gr.Dropdown( ["Model-loại-1", "Model-loại-2", "Model-loại-3"], value="Model-loại-1", label="🤖 Loại model ", show_label=True)
+                        model_id = gr.Dropdown( ["Model-loại-1", "Model-loại-2", "Model-loại-3"], value="Model-loại-2", label="🤖 Loại model ", show_label=True)
                     
                     with gr.Column(scale=4, min_width=800, min_height=600):
                         text = gr.Textbox(label="Nhập chữ để tạo ảnh", placeholder="Nhập chữ:(Bạn muốn tạo hình ảnh gì??)..", show_label=True, max_lines=1).style(
@@ -253,7 +248,7 @@ def run_demo():
             )
             
         
-    demo.launch(server_name="140.215.75.98", server_port=2222, share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
+    demo.launch( share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
 if __name__ == '__main__':
 
