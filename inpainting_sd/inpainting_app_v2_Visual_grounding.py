@@ -18,7 +18,7 @@ import random
 from utils import bin2coord, coord2bin, decode_fn, preprocess_image_v2, preprocess_mask_v2
 from stable_diffusion_model import StableDiffusionInpaintingPipeline_
 
-
+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
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 device = torch.device(
     "cuda") if torch.cuda.is_available() else torch.device("cpu")

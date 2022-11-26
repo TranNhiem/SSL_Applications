@@ -18,7 +18,7 @@ https://huggingface.co/runwayml/stable-diffusion-inpainting
 https://huggingface.co/spaces/runwayml/stable-diffusion-inpainting/tree/main 
 
 
-Note: You must comment these line of code from line 43 --> 49 of diffusers versio 0.6.0
+Note 1: You must comment these line of code from line 43 --> 49 of diffusers version= 0.6.0
     # mask = Image.fromarray(mask)
     # mask = np.array(mask.convert("L"))
     # mask = mask.astype(np.float32) / 255.0
@@ -28,6 +28,11 @@ Note: You must comment these line of code from line 43 --> 49 of diffusers versi
     # mask = torch.from_numpy(mask)
    
 "/anaconda/envs/solo_learn/lib/python3.10/site-packages/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_inpaint.py"
+
+Note 2: Hardware Efficient with Xformer installation 
+1.. Installation guide
+2.. Implement it in your code 
+
 '''
  
 import os
@@ -43,7 +48,7 @@ from torch import autocast
 #from diffusion_pipeline.sd_inpainting_pipeline import  StableDiffusionInpaintPipeline
 from diffusers import StableDiffusionInpaintPipeline
 from glob import glob
-from diffusers import LMSDiscreteScheduler
+from diffusers import LMSDiscreteScheduler, DDIMScheduler #EulerDiscreteScheduler
 from torchvision import transforms
 ## API for Language Translation Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
@@ -51,31 +56,18 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 device = torch.device(
     "cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-
-NLLB_path= "/data1/pretrained_weight/NLLB/distill_nllb_1.3B"
-
+# huggingface-cli login step 1
+# Token =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
+###--------------------------------
+### Section Sequence2sequence Language Translation model
+###--------------------------------
+NLLB_path= "/data1/pretrained_weight/NLLB"
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B",cache_dir=NLLB_path )#cache_dir=NLLB_path
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", cache_dir=NLLB_path)
 
-###--------------------------------
-### Section for SD  Model 
-###--------------------------------
-SD_path =  "/data1/pretrained_weight/NLLB/StableDiffusion"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-pipeimg = StableDiffusionInpaintPipeline.from_pretrained(
-    #"CompVis/stable-diffusion-v1-4",
-    "runwayml/stable-diffusion-inpainting",
-    revision="fp16",
-    torch_dtype=torch.float16,
-    cache_dir=SD_path
-    #scheduler=lms,
-    #use_auth_token=True,
-).to("cuda")
 
 def dummy(images, **kwargs): return images, False
-pipeimg.safety_checker = dummy
 
 def mask_processes(mask, h,w):
     #mask=Image.fromarray(mask) ## if input is numpy array
@@ -96,9 +88,8 @@ def mask_processes(mask, h,w):
     mask = torch.from_numpy(mask)
 
     return mask
-generator = torch.Generator(device="cuda").manual_seed(random.randint(0,10000)) # change the seed to get different results
 
-def read_content(file_path: str) -> str:
+def read_content(file_path) :
     """read the content of target file
     """
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -106,7 +97,7 @@ def read_content(file_path: str) -> str:
 
     return content
 
-def infer(prompt_, img, samples_num, steps_num, option, language_input,scale=7.5, resize_image_method="" ): #option
+def infer(prompt_, img,language_input, seed, option="foreground_area",samples_num=4, steps_num=50,scale=7.5, resize_image_method="BILINEAR" ): #option
     ## Checking the Image Size then Resize image
     sampling_resize= {
         "BILINEAR": PIL.Image.BILINEAR,
@@ -165,78 +156,124 @@ def infer(prompt_, img, samples_num, steps_num, option, language_input,scale=7.5
     }
 
     ## Language Translation
-    if source_langage[language_input] != "English" and source_langage[language_input] != "empty":
+    #samples_num=int(samples_num/2)
+    if source_langage[language_input] != "English":
         translator_prompt = pipeline('translation', model=model, tokenizer=tokenizer, src_lang=source_langage[language_input], tgt_lang='eng_Latn', max_length = 400)
         prompt= translator_prompt(prompt_)[0]
         prompt_=prompt['translation_text']
         print("Your English prompt translate from : ", prompt_)
-
         prompt_= [prompt_]*samples_num
     else:
         
         prompt_= [prompt_]*samples_num
         print(prompt_)
+    
+    ###--------------------------------
+    ## Stable Diffusion Model Section 
+    ###--------------------------------
+    ## beta_1 & beta_2 are better 
+    model_id_={
+        "beta_1": "runwayml/stable-diffusion-inpainting", 
+        "beta_2": "stable-diffusion-2-inpainting", 
+        "inpainting_beta_3": "prompthero/openjourney",
+        "inpainting_beta_4": "CompVis/stable-diffusion-v1-4",
+        #"Model-3": "runwayml/stable-diffusion-v1-5",
+        #"Model-4": "stabilityai/stable-diffusion-2", 
+    }
+
+    SD_model="/data1/pretrained_weight/StableDiffusion"
+    generator = torch.Generator(device="cuda").manual_seed(int(seed)) # change the seed to get different results
+    LMSD = LMSDiscreteScheduler.from_config(model_id_["beta_1"], subfolder="scheduler")
+    #DDIMS = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
+    Euler_1 = EulerDiscreteScheduler.from_pretrained(model_id_["beta_1"], subfolder="scheduler", prediction_type="v_prediction")
+    #Euler_2 = EulerDiscreteScheduler.from_pretrained(model_id_["beta_2"], subfolder="scheduler", prediction_type="v_prediction")
+
+
+    pipeimg_1 = StableDiffusionInpaintPipeline.from_pretrained(
+        model_id_["beta_1"], #
+        revision="fp16",
+        torch_dtype=torch.float16,
+        cache_dir=SD_model, 
+        #scheduler=Euler_1,
+        #use_auth_token=True,
+    ).to("cuda")
+    # pipeimg_2 = StableDiffusionInpaintPipeline.from_pretrained(
+    #     model_id_["beta_2"], #
+    #     revision="fp16",
+    #     torch_dtype=torch.float16,
+    #     cache_dir=SD_model, 
+    #     #scheduler=Euler_1,
+    #     #use_auth_token=True,
+    # ).to("cuda")
+    ## Remove safety checker 
+    pipeimg_1.safety_checker = dummy
+    # pipeimg_2.safety_checker = dummy
+    
     # Generate image for the masking area with prompt
-    with autocast("cuda"):#"cuda"
+    #with autocast("cuda"):#"cuda"
+    with torch.autocast("cuda"), torch.inference_mode():
     # with torch.cuda.amp.autocast(dtype=torch.float16):
-        images = pipeimg(prompt=prompt_, image= image, mask_image=mask,height=h, width=w,
+        images_1 = pipeimg_1(prompt=prompt_, image= image, mask_image=mask,height=h, width=w,
                                 num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images
-        #breakpoint()
-        return images
+    #torch.cuda.empty_cache()                            
+    # with torch.autocast("cuda"), torch.inference_mode():
+    #     images_2 = pipeimg_2(prompt=prompt_, image= image, mask_image=mask,height=h, width=w,
+    #                                 num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images
+    #     #breakpoint()
+    # torch.cuda.empty_cache()
+    return images_1, #images_2
 
 def run_demo(): 
     block = gr.Blocks(css=".container { max-width: 1300px; margin: auto; }")
     with block as demo:
         gr.HTML(read_content("header.html"))
         with gr.Group():
-            with gr.Box():
-                with gr.Row().style(mobile_collapse=False, equal_height=True):
-                    with gr.Column(scale=4, min_width=200, min_height=600):
-                        language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
-                        "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ],value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
-                    
-                    with gr.Column(scale=4, min_width=800, min_height=600):
-                        text = gr.Textbox(label="Your text prompt", placeholder="Typing: (what you want to edit in your image)..", show_label=True, max_lines=1).style(
-                            border=(True, False, True, True),
-                            rounded=(True, False, False, True),
-                            container=False,)
-                    
-                    with gr.Column(scale=4, min_width=100, min_height=300):
-                        btn = gr.Button("Run").style(
-                            margin=False, rounded=(True, True, True, True),)
+           
+            with gr.Row().style(mobile_collapse=False, equal_height=True):
+                with gr.Column(scale=4, min_width=200, min_height=600):
+                    language_input = gr.Dropdown( ["🇱🇷 English", "🇻🇳 Vietnamese", "🇹🇼 TraditionalChinese", "🇨🇳 SimplifiedChinese", "🇫🇷 French", 
+                    "🇩🇪 German","🇲🇨 Indonesian","🇯🇵 Japanese ","🇰🇷 Korean","🇪🇸 Spanish", "🇹🇭 Thai", ],value="🇱🇷 English", label="🌎 Choosing Your Language: 🇱🇷,🇻🇳,🇹🇼,🇨🇳,🇫🇷,🇩🇪,🇯🇵 ", show_label=True)
+                
+                with gr.Column(scale=4, min_width=600, min_height=600):
+                    text = gr.Textbox(label="Your text prompt", placeholder="Typing: (what you want to edit in your image)..", show_label=True, max_lines=1).style(
+                        border=(True, False, True, True),
+                        rounded=(True, False, False, True),
+                        container=False,)
+                
+                with gr.Column(scale=4, min_width=200, min_height=300):
+                    # model_id = gr.Dropdown( ["beta_1", "beta_2", "beta_3", "beta_4"], value="beta_1", label="🤖 Inpainting models ", show_label=True)
+                    btn = gr.Button("Run").style(margin=False, rounded=(True, True, True, True),)
 
-                # option = gr.Radio(label=" Selecting Inpainting Area", default="Mask Area", choices=[
-                #     "Mask Area", "Background Area"], show_label=True)
+
+            with gr.Row().style(mobile_collapse=False, equal_height=True):
+                    with gr.Column(scale=4, min_width=300, min_height=600):
+                        #option = gr.Dropdown( ["Mask Area", "Background Area"], Value="Mask Area", label="Replacing Area", show_label=True)
+                        option = gr.Radio(label="Inpainting Area", value="Mask Area", choices=["Mask Area", "Background Area"], show_label=True)
+                    #resize_image_method = gr.Dropdown( ["BILINEAR","BICUBIC", "ANTIALIAS", "LANCZOS", "NEAREST"],label="Method Resize Image", show_label=True)
+                    with gr.Column(scale=4, min_width=300, min_height=600):
+                        samples_num = gr.Slider(label="Number of Generated Image", minimum=1, maximum=10, value=4, step=2,)  # show_label=False
+                    with gr.Column(scale=4, min_width=300, min_height=600):
+                        # steps_num = gr.Slider(label="Generatio of steps", minimum=10, maximum=200, value=50, step=5,)  # show_label=False
+                        seed= gr.Number(value=12032, label="Control Randomness for Image Generated", show_label=True)
+                        # scale = gr.Slider(label="Guidance scale", minimum=0.0,
+                        #                 maximum=30, value=7.5, step=0.1,)  # show_label=False
 
             with gr.Row().style(mobile_collapse=False,):#gallery
 
                 with gr.Column():#scale=1, min_width=100, min_height=400
                     with gr.Row():
                         image = gr.Image(source="upload", tool="sketch",label="Input image",elem_id="image_upload", type="pil").style(height=400)
-                        #
-                    with gr.Row().style(mobile_collapse=False, equal_height=True):
-                          # with gr.Row().style(mobile_collapse=False, equal_height=True):
-                        option = gr.Dropdown( ["Mask Area", "Background Area"],label="Replacing Area", show_label=True)
-                        #resize_image_method = gr.Dropdown( ["BILINEAR","BICUBIC", "ANTIALIAS", "LANCZOS", "NEAREST"],label="Method Resize Image", show_label=True)
-                        samples_num = gr.Slider(label="Number of Generated Image",
-                                                minimum=1, maximum=10, value=1, step=1,)  # show_label=False
-                        steps_num = gr.Slider(label="Generatio of steps", minimum=10, maximum=200, value=50, step=5,)  # show_label=False
-                      
-                        # scale = gr.Slider(label="Guidance scale", minimum=0.0,
-                        #                 maximum=30, value=7.5, step=0.1,)  # show_label=False
 
                 with gr.Column():  #scale=1, min_width=80, min_height=300
-                    gallery = gr.Gallery(label="Edited images",show_label=True).style(grid=[2], height="auto")
+                    gallery = gr.Gallery(label="Edited images",show_label=True).style(grid=[2], height="auto").style(height=400)
                     #image_out = gr.Image(label="Edited Image", elem_id="output-img").style(height=400)
                     # with gr.Group(elem_id="share-btn-container"):
                         # community_icon = gr.HTML(community_icon_html, visible=False)
                         # loading_icon = gr.HTML(loading_icon_html, visible=False)
                         # share_button = gr.Button("Share to community", elem_id="share-btn", visible=False)
 
-            btn.click(fn=infer, inputs=[text, image, samples_num,
-                            steps_num, option, language_input, ], outputs=[gallery])
+            btn.click(fn=infer, inputs=[text,image,language_input,seed, option, samples_num, ], outputs=[gallery ])
 
-           
         
             gr.HTML(
                 """
@@ -258,6 +295,10 @@ def run_demo():
                             <a href="https://twitter.com/TranRick2" style="text-decoration: underline;" target="_blank"> 🙌 Twitter</a> ; 
                             <a href="https://www.facebook.com/jean.tran.336" style="text-decoration: underline;" target="_blank"> 🙌 Facebook</a> 
                         </p>
+                        </p>
+                        <p style="align-items: center; margin-bottom: 7px;" >
+                        <a This app power by (Natural Language Translation) Text-2-Image Diffusion Generative Model (StableDiffusion).</a>
+                        </p>
                         </div>
                     </div>
                     <div style="
@@ -268,9 +309,7 @@ def run_demo():
                         margin-bottom: 8px;
                         ">
                         </p> 
-                        <p style="align-items: center; margin-bottom: 5px;" >
-                        This App power Natural Language Translation and Text-To-Image Generation Model.
-                        </p> 
+                        
                         <p>
                         1. Natural Language Translation Model power by NLLB-200
                         <a href="https://ai.facebook.com/research/no-language-left-behind/" style="text-decoration: underline;" target="_blank">NLLB</a>  
@@ -293,7 +332,7 @@ def run_demo():
             )
             
         
-    demo.launch(share=True, enable_queue=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
+    demo.launch( share=True, enable_queue=True,  debug=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
 if __name__ == '__main__':
 

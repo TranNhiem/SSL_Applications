@@ -50,7 +50,6 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 # os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # huggingface-cli login step 1
 # Token =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
-
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 

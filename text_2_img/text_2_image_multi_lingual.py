@@ -170,7 +170,6 @@ examples = [
             "아름다운 반사 산 호수에서 두 개의 검은 백조가 머리를 만지는 사진, 화려한 열기구가 백조, 열기구, 복잡하고 전문적으로 상세한 8k, hdr, cgsociety","🇰🇷 Korean", "Model-2", 
         ], 
 
-
 ]
 
 def run_demo(): 
