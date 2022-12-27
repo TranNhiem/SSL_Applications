@@ -1,6 +1,6 @@
 import gradio as gr 
 import torch 
-from diffusers import StableDiffusionPipeline, DDIMScheduler
+from diffusers import StableDiffusionPipeline, DDIMScheduler, DPMSolverMultistepScheduler
 import os 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
@@ -14,6 +14,20 @@ g_cuda.manual_seed(seed)
 
 # @title Load the model
 scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
+
+scheduler = DPMSolverMultistepScheduler(
+    beta_start=0.00085,
+    beta_end=0.012,
+    beta_schedule="scaled_linear",
+    num_train_timesteps=1000,
+    trained_betas=None,
+    predict_epsilon=True,
+    thresholding=False,
+    algorithm_type="dpmsolver++",
+    solver_type="midpoint",
+    lower_order_final=True,
+)
+
 model_path= "/data1/StableDiffusion/Dreambooth/rick/new_regular/10000"
 pipe = StableDiffusionPipeline.from_pretrained(model_path, scheduler= scheduler, torch_dtype=torch.float16,).to("cuda")
 

@@ -1,5 +1,8 @@
-import os, subprocess 
+import sys
+sys.path.append('src/blip')
+sys.path.append('clip-interrogator')
 
+import os, subprocess 
 import gradio as gr
 from clip_interrogator import Config, Interrogator
 
@@ -53,4 +56,4 @@ def get_caption(image, mode, clip_model_name, best_max_flavors=32):
         return ci.interrogate_classic(image)
     else:
         return ci.interrogate_fast(image)
-        
+

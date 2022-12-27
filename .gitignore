@@ -22,3 +22,6 @@ rad.json
 TestResults.xml
 *.cu
 *.DS_Store 
+
+## Pretrain weight model 
+*.pkl

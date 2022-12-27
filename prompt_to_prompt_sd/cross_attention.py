@@ -68,17 +68,8 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 
 #Init diffusion model
-SD_Model = FLAGS.sd_model
-model_path= FLAGS.store_path
-#scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
 
-ldm_stable = StableDiffusionPipeline.from_pretrained(SD_Model, cache_dir=model_path, ).to(device)#scheduler= scheduler,
-tokenizer = ldm_stable.tokenizer
-MAX_NUM_WORDS = tokenizer.model_max_length
-LOW_RESOURCE= FLAGS.low_resource
-NUM_DIFFUSION_STEPS= FLAGS.num_diffusion_steps
-GUIDANCE_SCALE= FLAGS.guidance_scale
-print("Loaded all models to GPU")
+
 
 
 class LocalBlend: 
@@ -93,7 +84,7 @@ class LocalBlend:
     def __call__(self, x_t, attention_store):
         k = 1
         maps = attention_store["down_cross"][2:4] + attention_store["up_cross"][:3]
-        maps = [item.reshape(self.alpha_layers.shape[0], -1, 1, 16, 16, MAX_NUM_WORDS) for item in maps]
+        maps = [item.reshape(self.alpha_layers.shape[0], -1, 1, 16, 16, self.MAX_NUM_WORDS) for item in maps]
         maps = torch.cat(maps, dim=1)
         maps = (maps * self.alpha_layers).sum(-1).mean(1)
         mask = nnf.max_pool2d(maps, (k * 2 + 1, k * 2 +1), (1, 1), padding=(k, k))
@@ -104,7 +95,7 @@ class LocalBlend:
         x_t = x_t[:1] + mask * (x_t - x_t[:1])
         return x_t
        
-    def __init__(self, prompts: List[str], words: [List[List[str]]], threshold=.3):
+    def __init__(self,tokenizer, prompts: List[str], words: [List[List[str]]], MAX_NUM_WORDS, threshold=.3):
         alpha_layers = torch.zeros(len(prompts),  1, 1, 1, 1, MAX_NUM_WORDS)
         for i, (prompt, words_) in enumerate(zip(prompts, words)):
             if type(words_) is str:
@@ -114,8 +105,7 @@ class LocalBlend:
                 alpha_layers[i, :, :, :, :, ind] = 1
         self.alpha_layers = alpha_layers.to(device)
         self.threshold = threshold
-
-
+        self.MAX_NUM_WORDS=MAX_NUM_WORDS
 
 class AttentionControl(abc.ABC):
     
@@ -127,7 +117,7 @@ class AttentionControl(abc.ABC):
     
     @property
     def num_uncond_att_layers(self):
-        return self.num_att_layers if LOW_RESOURCE else 0
+        return self.num_att_layers if self.LOW_RESOURCE else 0
     
     @abc.abstractmethod
     def forward (self, attn, is_cross: bool, place_in_unet: str):
@@ -135,7 +125,7 @@ class AttentionControl(abc.ABC):
 
     def __call__(self, attn, is_cross: bool, place_in_unet: str):
         if self.cur_att_layer >= self.num_uncond_att_layers:
-            if LOW_RESOURCE:
+            if self.LOW_RESOURCE:
                 attn = self.forward(attn, is_cross, place_in_unet)
             else:
                 h = attn.shape[0]
@@ -151,10 +141,11 @@ class AttentionControl(abc.ABC):
         self.cur_step = 0
         self.cur_att_layer = 0
 
-    def __init__(self):
+    def __init__(self, LOW_RESOURCE=True):
         self.cur_step = 0
         self.num_att_layers = -1
         self.cur_att_layer = 0
+        self.LOW_RESOURCE = LOW_RESOURCE
 
 class EmptyControl(AttentionControl):
     def forward(self, attn, is_cross: bool, place_in_unet: str):
@@ -231,7 +222,7 @@ class AttentionControlEdit(AttentionStore, abc.ABC):
             attn = attn.reshape(self.batch_size * h, *attn.shape[2:])
         return attn
     
-    def __init__(self, prompts, num_steps: int,
+    def __init__(self, tokenizer, prompts, num_steps: int,
                  cross_replace_steps: Union[float, Tuple[float, float], Dict[str, Tuple[float, float]]],
                  self_replace_steps: Union[float, Tuple[float, float]],
                  local_blend: Optional[LocalBlend]):
@@ -248,9 +239,9 @@ class AttentionReplace(AttentionControlEdit):
     def replace_cross_attention(self, attn_base, att_replace):
         return torch.einsum('hpw,bwn->bhpn', attn_base, self.mapper)
       
-    def __init__(self, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
+    def __init__(self,tokenizer, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
                  local_blend: Optional[LocalBlend] = None):
-        super(AttentionReplace, self).__init__(prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
+        super(AttentionReplace, self).__init__(tokenizer, prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
         self.mapper = seq_aligner.get_replacement_mapper(prompts, tokenizer).to(device)
 
 class AttentionRefine(AttentionControlEdit):
@@ -260,7 +251,7 @@ class AttentionRefine(AttentionControlEdit):
         attn_replace = attn_base_replace * self.alphas + att_replace * (1 - self.alphas)
         return attn_replace
 
-    def __init__(self, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
+    def __init__(self, tokenizer, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
                  local_blend: Optional[LocalBlend] = None):
         super(AttentionRefine, self).__init__(prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
         self.mapper, alphas = seq_aligner.get_refinement_mapper(prompts, tokenizer)
@@ -281,7 +272,7 @@ class AttentionReweight(AttentionControlEdit):
         self.equalizer = equalizer.to(device)
         self.prev_controller = controller
 
-def get_equalizer(text: str, word_select: Union[int, Tuple[int, ...]], values: Union[List[float],
+def get_equalizer(tokenizer, text: str, word_select: Union[int, Tuple[int, ...]], values: Union[List[float],
                   Tuple[float, ...]]):
     if type(word_select) is int or type(word_select) is str:
         word_select = (word_select,)
@@ -306,7 +297,7 @@ def aggregate_attention(prompts, attention_store: AttentionStore, res: int, from
     return out.cpu()
 
 
-def show_cross_attention(prompts, attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
+def show_cross_attention(tokenizer, prompts, attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
     tokens = tokenizer.encode(prompts[select])
     decoder = tokenizer.decode
     attention_maps = aggregate_attention(prompts, attention_store, res, from_where, True, select)
@@ -337,12 +328,12 @@ def show_self_attention_comp(attention_store: AttentionStore, res: int, from_whe
         images.append(image)
     utils.view_images(np.concatenate(images, axis=1))
 
-def run_and_display(prompts, controller, latent=None, run_baseline=False, generator=None):
+def run_and_display(ldm_stable, prompts, controller, latent=None,NUM_DIFFUSION_STEPS=50, GUIDANCE_SCALE=7.5,low_resource=True, run_baseline=False, generator=None):
     if run_baseline:
         print("w.o. prompt-to-prompt")
         images, latent = run_and_display(prompts, EmptyControl(), latent=latent, run_baseline=False, generator=generator)
         print("with prompt-to-prompt")
-    images, x_t = utils.text2image_ldm_stable(ldm_stable, controller, prompts, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE)
+    images, x_t = utils.text2image_ldm_stable(ldm_stable, controller, prompts, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=True)
     # images.to(device)
     # x_t = x_t.to(device)
     utils.view_images(images)
