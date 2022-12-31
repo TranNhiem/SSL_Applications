@@ -5,13 +5,15 @@ import random
 import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.utils import download_url
-from stable_diffusion_model import StableDiffusionPipeline
+#from stable_diffusion_model import StableDiffusionPipeline
+from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
+
 from PIL import Image
 import sys
 from pathlib import Path
 #CUDA_VISIBLE_DEVICES="1"
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-from min_dalle import MinDalle
+# from min_dalle import MinDalle
 #CUDA_VISIBLE_DEVICES=2,3 python xxx.py
 # device = torch.device(
 #     "cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -38,8 +40,9 @@ def pre_caption(caption, max_words=50):
 
     return caption
 
-## Generated data given by the text description 
-class COCO_synthetic_Dataset(Dataset):
+## Generated data given by the text description
+## Old Design 
+class Old_version_COCO_synthetic_Dataset(Dataset):
 
     def __init__(self, image_root, ann_root, max_words=200, prompt='4k , highly detailed', generate_mode="repeat", 
                          guidance_scale=7.5,  num_inference_steps=70, seed=123245):
@@ -73,11 +76,28 @@ class COCO_synthetic_Dataset(Dataset):
         self.append_id = ["test"]
         self.repeat_name=["test"]
         self.append_id_repeat=["test"]
-        self.model = StableDiffusionPipeline.from_pretrained(
-            "CompVis/stable-diffusion-v1-4", revision="fp16",
-            torch_dtype=torch.float32,
+        
+        
+        ### Stable Diffusion 1.4
+        store_path="/data1/pretrained_weight/StableDiffusion/"
+        # self.model = StableDiffusionPipeline.from_pretrained(
+        #     "CompVis/stable-diffusion-v1-4", revision="fp16",
+        #     torch_dtype=torch.float32,
+        #     use_auth_token=True,
+        #     cache_dir= store_path, 
+        # ).to("cuda")
+
+        ### Stable Diffusion 2.1
+        pipe = StableDiffusionPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-2-1", revision="fp16",
+            torch_dtype=torch.float16,
             use_auth_token=True,
-        ).to("cuda")
+            cache_dir= store_path, 
+        )
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+        self.model=pipe.to("cuda")
+        
+
         
     def __len__(self):
         return len(self.annotation)
@@ -105,7 +125,7 @@ class COCO_synthetic_Dataset(Dataset):
                         generator=self.generator,
                         strength=0.8,
                         return_intermediates=False,
-                    )['sample']
+                    ).images[0]
 
             else:  # Case not repeat image
                 #print("Using mode Prompt to generate image")
@@ -121,7 +141,7 @@ class COCO_synthetic_Dataset(Dataset):
                                 generator=self.generator,
                                 strength=0.8,
                                 return_intermediates=False,
-                            )['sample']
+                            ).images[0]
         else: 
             ## inCase the image name repeat 
             if image_id == self.append_id[-1]:
@@ -174,12 +194,174 @@ class COCO_synthetic_Dataset(Dataset):
         with open(path, 'w') as outfile:
             json.dump(self.new_json, outfile)
 
-generate_data= COCO_synthetic_Dataset(image_root='/data1/coco_synthetic/', ann_root='/data1/coco_synthetic/', generate_mode="no_repeat")
+
+class COCO_synthetic_Dataset(Dataset):
+
+    def __init__(self, image_root, ann_root, max_words=200, prompt='4k , highly detailed', generate_mode="repeat", 
+                         guidance_scale=7.5,  num_inference_steps=35, seed=123245):
+        '''
+        image_root (string): Root directory for storing the generated images (ex: /data/coco_synthetic/)
+        anno_root(string): directory for storing the human caption file from COCO Caption dataset
+        '''
+        url = 'https://storage.googleapis.com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
+        filename = 'coco_karpathy_train.json'
+
+        Path(image_root + "val2014/").mkdir(parents=True, exist_ok=True)
+        Path(image_root + "train2014/").mkdir(parents=True, exist_ok=True)
+
+        Path(ann_root).mkdir(parents=True, exist_ok=True)
+
+        # os.makedirs(image_root+ "val2014/", exist_ok=True)
+        # os.makedirs(ann_root, exist_ok=True)
+
+        download_url(url, ann_root)
+        self.annotation = json.load(
+            open(os.path.join(ann_root, filename), 'r'))
+
+        self.image_root = image_root
+        self.max_words = max_words
+        self.prompt = prompt
+        self.guidance_scale = guidance_scale
+        self.num_inference_steps = num_inference_steps
+        self.generate_mode= generate_mode
+        # random.randint(0, 100000) #random.randint(0,10000) # change the seed to get different results
+        self.generator = torch.Generator(device="cuda").manual_seed(seed)
+        self.append_id = ["test"]
+        self.repeat_name=["test"]
+        self.append_id_repeat=["test"]
+        
+        
+        ### Stable Diffusion 1.4
+        store_path="/data1/pretrained_weight/StableDiffusion/"
+        # self.model = StableDiffusionPipeline.from_pretrained(
+        #     "CompVis/stable-diffusion-v1-4", revision="fp16",
+        #     torch_dtype=torch.float32,
+        #     use_auth_token=True,
+        #     cache_dir= store_path, 
+        # ).to("cuda")
+
+        ### Stable Diffusion 2.1
+        pipe = StableDiffusionPipeline.from_pretrained(
+            "CompVis/stable-diffusion-v1-4", revision="fp16",#stabilityai/stable-diffusion-2-1
+            torch_dtype=torch.float16,
+            use_auth_token=True,
+            cache_dir= store_path, 
+        )
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+        self.model=pipe.to("cuda")
+        
+
+        
+    def __len__(self):
+        return len(self.annotation)
+
+    def __getitem__(self, idx):
+        ann = self.annotation[idx]
+
+        caption = self.prompt + pre_caption(ann['caption'], self.max_words)
+        image_id = ann['image_id']
+        image_name = ann['image']  # Saved image's name
+        path=os.path.join(self.image_root, image_name)
+        if self.generate_mode=="repeat":
+            if image_id == self.append_id[-1]:
+                #print("Using mode Image to generate image")
+                init_image = Image.open(os.path.join(self.image_root, image_name))
+                with torch.autocast('cuda'):
+                    generate_image = self.model(
+                        prompt=[caption],
+                        mode="image",
+                        height=512,
+                        width=512,
+                        num_inference_steps=50,
+                        guidance_scale=self.guidance_scale,
+                        init_image=init_image,
+                        generator=self.generator,
+                        strength=0.8,
+                        return_intermediates=False,
+                    ).images[0]
+
+            else:  # Case not repeat image
+                #print("Using mode Prompt to generate image")
+                        # with torch.autocast('cuda'):
+                        #     generate_image = self.model(
+                        #         prompt=[caption],
+                        #         mode="prompt",
+                        #         height=512,
+                        #         width=512,
+                        #         num_inference_steps=self.num_inference_steps,
+                        #         guidance_scale=self.guidance_scale,
+                        #         init_image=None,
+                        #         generator=self.generator,
+                        #         strength=0.8,
+                        #         return_intermediates=False,
+                        #     ).images[0]
+
+                        with torch.autocast('cuda'):  
+                            generate_image = self.model(
+                                prompt=[caption],
+                                height=512,
+                                width=512,
+                                num_inference_steps=self.num_inference_steps,
+                                guidance_scale=self.guidance_scale,
+                                generator=self.generator,
+                            ).images[0]
+
+        else: 
+            ## inCase the image name repeat 
+            if image_id == self.append_id[-1]:
+                # The first image repeat is creat
+                image_name_= self.repeat_name[-1][:-5] + "1" +".jpg"
+                path=os.path.join(self.image_root, image_name_)
+
+                #checking image is exist or not
+                if os.path.isfile(path) is True or os.path.exists(path) is True:
+                    print("Next repeat image is append")
+                    image_name= self.repeat_name[-1][:-4] + "1" + ".jpg"
+                    image_id=self.append_id_repeat[-1] + "1"
+                    path=os.path.join(self.image_root, image_name)
+                    self.append_id_repeat.append(image_id)
+                    self.repeat_name.append(image_name)
+
+                else:
+                    print("first repeat image is created")
+                    image_id= image_id +"1"
+                    image_name= image_name[:-4] + "1.jpg"
+                    path=os.path.join(self.image_root, image_name)
+                    self.append_id_repeat.append(image_id)
+                    self.repeat_name.append(image_name)
+        
+            ## Append the new image name. 
+            else: 
+                self.append_id.append(image_id)
+                self.append_id_repeat.append(image_id)
+                self.repeat_name.append(image_name)
+
+            with torch.autocast('cuda'):  
+                generate_image = self.model(
+                    prompt=[caption],
+                    height=512,
+                    width=512,
+                    num_inference_steps=self.num_inference_steps,
+                    guidance_scale=self.guidance_scale,
+                    generator=self.generator,
+                ).images[0]
+
+        generate_image.save(path)
+        self.append_id.append(image_id)
+        print(f"image name {image_id} Generated")
+        return image_name
+
+    def save_json(self, path):
+        with open(path, 'w') as outfile:
+            json.dump(self.new_json, outfile)
+
+generate_data= COCO_synthetic_Dataset(image_root='/data1/coco_synthetic/coco_synthetic/', ann_root='/data1/coco_synthetic/', generate_mode="no_repeat")
 ## CoCo Caption dataset Caption Length 566.747=
 print(generate_data.__len__())
-for i in range(300000, 400000):
+for i in range(400000, 500000):
     generate_data.__getitem__(i)
-generate_data.save_json("/data1/coco_synthetic/coco_synthetic_300k_400k.json") 
+generate_data.save_json("/data1/coco_synthetic/coco_synthetic/coco_synthetic_400k_500k.json") 
+
 print("------------------------ Done ------------------------")
 
 class COCO_synthetic_Dalle_SD(Dataset): 
