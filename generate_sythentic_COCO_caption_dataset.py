@@ -20,8 +20,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 # print(f"Using available: {device}")
 
 # Preprocessing the caption with some special characters
-
-
 def pre_caption(caption, max_words=50):
     caption = re.sub(r"([.!\"()*#:;~])", ' ', caption.lower())
     caption = re.sub(r"\s{2,}", ' ', caption)
@@ -194,7 +192,6 @@ class Old_version_COCO_synthetic_Dataset(Dataset):
         with open(path, 'w') as outfile:
             json.dump(self.new_json, outfile)
 
-
 class COCO_synthetic_Dataset(Dataset):
 
     def __init__(self, image_root, ann_root, max_words=200, prompt='4k , highly detailed', generate_mode="repeat", 
@@ -249,9 +246,7 @@ class COCO_synthetic_Dataset(Dataset):
         )
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
         self.model=pipe.to("cuda")
-        
-
-        
+          
     def __len__(self):
         return len(self.annotation)
 
@@ -356,12 +351,12 @@ class COCO_synthetic_Dataset(Dataset):
             json.dump(self.new_json, outfile)
 
 generate_data= COCO_synthetic_Dataset(image_root='/data1/coco_synthetic/coco_synthetic/', ann_root='/data1/coco_synthetic/', generate_mode="no_repeat")
+
 ## CoCo Caption dataset Caption Length 566.747=
 print(generate_data.__len__())
 for i in range(400000, 500000):
     generate_data.__getitem__(i)
 generate_data.save_json("/data1/coco_synthetic/coco_synthetic/coco_synthetic_400k_500k.json") 
-
 print("------------------------ Done ------------------------")
 
 class COCO_synthetic_Dalle_SD(Dataset): 
@@ -493,3 +488,36 @@ class COCO_synthetic_Dalle_SD(Dataset):
 #     generate_data.__getitem__(i)
 # print("------------------------ Done ------------------------")
 # generate_data.save_json("/data1/coco_synthetic_Dalle_SD/coco_synthetic_150k_200k.json")
+
+class COCO_Synthetic_Img_invariance(Dataset): 
+    def __init__(self, image_root, ann_root, max_words=200, generate_mode="repeat", 
+                         guidance_scale=7.5,  num_inference_steps=35, seed=123245):
+        '''
+        image_root (string): Root directory for storing the generated images (ex: /data/coco_synthetic/)
+        anno_root(string): directory for storing the human caption file from COCO Caption dataset
+        '''
+        
+        url = 'https://storage.googleapis.com/sfr-vision-language-research/datasets/coco_karpathy_train.json'
+        filename = 'coco_karpathy_train.json'
+
+        Path(image_root + "val2014/").mkdir(parents=True, exist_ok=True)
+        Path(image_root + "train2014/").mkdir(parents=True, exist_ok=True)
+        Path(ann_root).mkdir(parents=True, exist_ok=True)
+
+        def __len__(self):
+            return len(self.annotation)
+
+        def __getitem__(self, idx):
+            ann = self.annotation[idx]
+
+            caption = self.prompt + pre_caption(ann['caption'], self.max_words)
+            image_id = ann['image_id']
+            image_name = ann['image']  # Saved image's name
+            path=os.path.join(self.image_root, image_name)
+
+generate_data= COCO_Synthetic_Img_invariance(image_root='/data1/coco_synthetic_Dalle_SD/', ann_root='/data1/coco_synthetic_Dalle_SD/')
+for i in range(150000, 200000):
+    generate_data.__getitem__(i)
+        
+
+        

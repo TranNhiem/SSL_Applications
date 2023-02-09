@@ -188,7 +188,6 @@ class AttentionStore(AttentionControl):
         self.step_store = self.get_empty_store()
         self.attention_store = {}
 
-
 class AttentionControlEdit(AttentionStore, abc.ABC):
     
     def step_callback(self, x_t):
@@ -296,7 +295,6 @@ def aggregate_attention(prompts, attention_store: AttentionStore, res: int, from
     out = out.sum(0) / out.shape[0]
     return out.cpu()
 
-
 def show_cross_attention(tokenizer, prompts, attention_store: AttentionStore, res: int, from_where: List[str], select: int = 0):
     tokens = tokenizer.encode(prompts[select])
     decoder = tokenizer.decode
@@ -312,7 +310,6 @@ def show_cross_attention(tokenizer, prompts, attention_store: AttentionStore, re
         images.append(image)
     utils.view_images(np.stack(images, axis=0))
     
-
 def show_self_attention_comp(attention_store: AttentionStore, res: int, from_where: List[str],
                         max_com=10, select: int = 0):
     attention_maps = aggregate_attention(attention_store, res, from_where, False, select).numpy().reshape((res ** 2, res ** 2))
@@ -338,3 +335,6 @@ def run_and_display(ldm_stable, prompts, controller, latent=None,NUM_DIFFUSION_S
     # x_t = x_t.to(device)
     utils.view_images(images)
     return images, x_t
+
+def null_text_diffusion(): 
+    pass 

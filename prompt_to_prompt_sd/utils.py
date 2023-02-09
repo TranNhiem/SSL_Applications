@@ -591,6 +591,7 @@ def inversestablediffusion(model, init_image, prompt="", guidance_scale=3.0, ste
                     
             
     return latent
+
 # sampling_resize= {
 #     "BILINEAR": PIL.Image.BILINEAR,
 #     "BICUBIC": PIL.Image.BICUBIC,
@@ -868,7 +869,8 @@ def update_alpha_time_word(alpha, bounds: Union[float, Tuple[float, float]], pro
     return alpha
 
 def get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps: Union[float, Tuple[float, float], Dict[str, Tuple[float, float]]],
-                                   tokenizer, max_num_words=77):
+                                   tokenizer,):
+    max_num_words=tokenizer.model_max_length
     if type(cross_replace_steps) is not dict:
         cross_replace_steps = {"default_": cross_replace_steps}
     if "default_" not in cross_replace_steps:
@@ -884,4 +886,32 @@ def get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps: Unio
                  if len(ind) > 0:
                     alpha_time_words = update_alpha_time_word(alpha_time_words, item, i, ind)
     alpha_time_words = alpha_time_words.reshape(num_steps + 1, len(prompts) - 1, 1, 1, max_num_words) # time, batch, heads, pixels, words
+    
+    
     return alpha_time_words
+## Processing image to certain offset 
+def process_image(image_path, left=0, right=0, top=0, bottom=0):
+    if type(image_path) is str:
+        image = np.array(Image.open(image_path))[:, :, :3]
+    else:
+        image = image_path
+    h, w, c = image.shape
+    left = min(left, w-1)
+    right = min(right, w - left - 1)
+    top = min(top, h - left - 1)
+    bottom = min(bottom, h - top - 1)
+    image = image[top:h-bottom, left:w-right]
+    h, w, c = image.shape
+    if h > w:
+        offset = (w - h) // 2
+        image = image[:, offset:offset + h]
+    elif w > h:
+        offset = (h - w) // 2
+        image = image[offset:offset + w, :]
+    ## Resize the image to 512x512
+    image= np.array(Image.fromarray(image).resize((512, 512)))
+    return image 
+
+
+
+
