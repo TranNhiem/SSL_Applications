@@ -18,10 +18,6 @@ pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 pipe.to("cuda")
         
 
-
-
-
-
 def inference(model, img, mask, steps=1000, lr=0.1, sigma=0.1, noise=0.1, 
               scheduler=None, diffuser=None, 
               attention_store=None, attention_replace=None, 
