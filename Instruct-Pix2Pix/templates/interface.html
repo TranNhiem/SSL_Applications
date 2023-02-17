@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Pix2Pix Demo</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gradio@1.5.5/gradio.min.css" />
+  </head>
+  <body>
+    <h1>Pix2Pix Demo</h1>
+    <div id="interface"></div>
+    <script src="https://cdn.jsdelivr.net/npm/gradio@1.5.5/gradio.min.js"></script>
+    <script>
+      var iface = {{ iface | tojson | safe }};
+      iface["output"] = gradio.callbackOutput("output");
+      gradio.Interface("interface", iface);
+    </script>
+  </body>
+</html>

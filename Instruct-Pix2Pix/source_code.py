@@ -1,27 +1,4 @@
 
-# @TranNhiem 2022 11/05
-'''
-Features Design include:
-1.. Creating MASK using brush to draw mask or creating mask using ClipSeg model () 
-2.. Text to Image Inpainting (Mask area or Background area)
-3.. Supporting multi-Language input 
-4.. Prompting Using Language model for create prompt or User prompt input. 
-5.. Creating Plugin exmaple style of Prompt and Upsampling for Inpainiting.
-
-## Installations requirements 
-!pip install git+https://github.com/TranNhiem/diffusers.git
-!pip install git+https://github.com/TranNhiem/CodeFormer.git
-
-## Reference for Image Generation checkpoint model
-Update Reference for Image Inpainting with Diffusion Models
-https://huggingface.co/runwayml/stable-diffusion-inpainting 
-https://huggingface.co/spaces/runwayml/stable-diffusion-inpainting/tree/main 
-
-Note 2: Hardware Efficient with Xformer installation 
-1.. Installation guide
-2.. Implement it in your code 
-
-'''
  
 import os
 import sys 
@@ -57,14 +34,6 @@ from codeformer_infer import inference
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 device = torch.device(
     "cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-## Concept adding multiple model inference and variable need to Clean up to Free up memory
-# del output
-# torch.cuda.empty_cache()
-
-## Login information Hugginface 
-# huggingface-cli login step 1
-# Token =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
 
 def dummy(images, **kwargs): return images, False
 
@@ -126,14 +95,7 @@ def infer(prompt_, img,language_input, seed, option="Mask Area",samples_num=4, m
         "🇻🇳 Vietnamese": "vie_Latn", 
         "🇹🇼 TraditionalChinese": "zho_Hant",
         "🇨🇳 SimplifiedChinese": "zho_Hans",
-        "🇫🇷 French" : "fra_Latn",
-        "🇩🇪 German": "deu_Latn",
-        "🇲🇨 Indonesian": "ind_Latn",
-        "🇯🇵 Japanese": "jpn_Jpan",
-        "🇰🇷 Korean": "kor_Hang", 
-        "🇪🇸 Spanish": "spa_Latn", 
-        "🇹🇭 Thai": "tha_Thai",
-        "": "empty",
+
     }
 
     ## Language Translation
@@ -164,28 +126,13 @@ def infer(prompt_, img,language_input, seed, option="Mask Area",samples_num=4, m
     model_id_={
         "beta_1": "runwayml/stable-diffusion-inpainting", 
         "beta_2": "stabilityai/stable-diffusion-2-inpainting", 
-        # "beta_3": "prompthero/openjourney",
-        # "beta_4": "CompVis/stable-diffusion-v1-4",
-        # "Model-3": "runwayml/stable-diffusion-v1-5",
-        #"Model-4": "stabilityai/stable-diffusion-2", 
+
     }
 
     SD_model="/data1/pretrained_weight/StableDiffusion/"
     generator = torch.Generator(device="cuda").manual_seed(int(seed)) # change the seed to get different results
     
-    DPM_Solver = DPMSolverMultistepScheduler(
-        beta_start=0.00085,
-        beta_end=0.012,
-        beta_schedule="scaled_linear",
-        num_train_timesteps=1000,
-        trained_betas=None,
-        # predict_epsilon=True,
-        thresholding=False,
-        algorithm_type="dpmsolver++",
-        solver_type="midpoint",
-        lower_order_final=True,)
 
-    
     #LMSD=LMSDiscreteScheduler.from_config(model_id_["beta_1"], subfolder="scheduler")
     # LMSD = LMSDiscreteScheduler.from_config(model_id_["beta_1"], subfolder="scheduler")
     DDIMS = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
@@ -199,57 +146,13 @@ def infer(prompt_, img,language_input, seed, option="Mask Area",samples_num=4, m
         "Euler": Euler
     }
 
-    if schedule_type !="LMSD":
-        pipeimg_1 = StableDiffusionInpaintPipeline.from_pretrained(
-            model_id_[model_id], #
-            revision="fp16",
-            torch_dtype=torch.float16,
-            cache_dir=SD_model, 
-            cheduler=schedule_type_[schedule_type],
-            use_auth_token='token_value',
-        ).to("cuda")
-
-    else: 
-        pipeimg_1 = StableDiffusionInpaintPipeline.from_pretrained(
-            model_id_[model_id], #
-            revision="fp16",
-            torch_dtype=torch.float16,
-            cache_dir=SD_model, 
-            use_auth_token='token_value',
-        ).to("cuda")
-
-        pipeimg_1.scheduler=LMSDiscreteScheduler.from_config(pipeimg_1.scheduler.config)
-
-
-    pipeimg_1.safety_checker = dummy
-
-    # Generate image for the masking area with prompt
-    #with autocast("cuda"):#"cuda"
-    #with torch.autocast("cuda"), torch.inference_mode():
+   
     with torch.cuda.amp.autocast(dtype=torch.float16):
         images_1 = pipeimg_1(prompt=prompt_,image= image, mask_image=mask, paint_area=option,  height=h, width=w,
                                 num_inference_steps=steps_num, guidance_scale=scale, generator=generator).images #negative_prompt=str(negative_prompt_)
     del pipeimg_1    
     torch.cuda.empty_cache()
     
-    ### Upscale Image ldm model 
-
-    # if upscale=="upscale": 
-  
-    #     images=[]
-    #     for id, img in enumerate(images_1): 
-    #         img.save(f"/home/harry/BLIRL/SSL_Applications/inpainting_sd/img{id}.png")
-    #     for i in range(len(images_1)): 
-    #         img=f"/home/harry/BLIRL/SSL_Applications/inpainting_sd/img{i}.png"
-    #         upscale_restore_img=inference(img, background_enhance= True, face_upsample= True, upscale= 4, codeformer_fidelity= 1.0, model_type="4x")
-    #         images.append(upscale_restore_img)
-    #     # for image in images_1: 
-    #     #     low_res_img = image.resize((180, 180))
-    #     #     # run pipeline in inference (sample random noise and denoise)
-    #     #     pipe=get_upscale_pipe(DPM_Solver, SD_model)
-    #     #     upscaled_image = pipe(low_res_img, num_inference_steps=100, eta=1).images[0]
-    #     #     images.append(upscaled_image)
-        
     if upscale=="Restore":
         images=[]
         for id, img in enumerate(images_1): 
@@ -328,12 +231,6 @@ def run_demo():
                         rounded=(True, False, False, True),
                         container=False,)
 
-              
-                #     negative_prompt = gr.Textbox(label="remove prompt", placeholder="Typing: (DON't want to have in generated image). Default is empty.", show_label=True, max_lines=1).style(
-                #         border=(True, False, True, True),
-                #         rounded=(True, False, False, True),
-                #         container=False,)
-
                 with gr.Column(scale=4, min_width=100, min_height=300):
                     with gr.Row().style(mobile_collapse=False, equal_height=True):
                         btn = gr.Button("Generate")#.style(margin=False, rounded=(True, True, True, True),)
@@ -361,11 +258,6 @@ def run_demo():
                     with gr.Column(scale=4, min_width=100, min_height=600):
                         # steps_num = gr.Slider(label="Generatio of steps", minimum=10, maximum=200, value=50, step=5,)  # show_label=False
                         seed= gr.Number(value=12032, label="Fixed Randomness", show_label=True)
-                        # scale = gr.Slider(label="Guidance scale", minimum=0.0,
-                        #                 maximum=30, value=7.5, step=0.1,)  # show_label=False
-        
-                    # with gr.Column(scale=4, min_width=100, min_height=300):
-                    #     stop_run = gr.Button("STOP Run")#.style(margin=False, rounded=(True, True, True, True),)
 
 
             with gr.Row().style(mobile_collapse=False,):#gallery
@@ -391,71 +283,10 @@ def run_demo():
 
                 with gr.Column():  #scale=1, min_width=80, min_height=300
                     gallery = gr.Gallery(label="Edited images",show_label=True).style(grid=[2], height="auto").style(height=400)
-                    #image_out = gr.Image(label="Edited Image", elem_id="output-img").style(height=400)
-                    # with gr.Group(elem_id="share-btn-container"):
-                        # community_icon = gr.HTML(community_icon_html, visible=False)
-                        # loading_icon = gr.HTML(loading_icon_html, visible=False)
-                        # share_button = gr.Button("Share to community", elem_id="share-btn", visible=False)
-            #image.change(fn=image_properties, inputs=image, outputs=input_image_properties)
             run_event=btn.click(fn=infer, inputs=[text,image,language_input,seed, option, samples_num, model_id, upscale, pallet_color,guidance_scale, generate_step, scheduler_type ], outputs=[gallery ])
             stop_run.click(fn=None, inputs=None, outputs=None, cancels=[run_event])
 
-            gr.HTML(
-                """
-                <div class="footer">
-                    <p style="align-items: center; margin-bottom: 7px;" >
-
-                    </p>
-                    <div style="text-align: Center; font-size: 1.5em; font-weight: bold; margin-bottom: 0.5em;">
-                        <div style="
-                            display: inline-flex; 
-                            gap: 0.6rem; 
-                            font-size: 1.0rem;
-                            justify-content: center;
-                            margin-bottom: 10px;
-                            ">
-                        <p style="align-items: center; margin-bottom: 7px;" >
-                            App Developer: @TranNhiem 🙋‍♂️ Connect with me on : 
-                        <a href="https://www.linkedin.com/feed/" style="text-decoration: underline;" target="_blank"> 🙌 Linkedin</a> ;  
-                            <a href="https://twitter.com/TranRick2" style="text-decoration: underline;" target="_blank"> 🙌 Twitter</a> ; 
-                            <a href="https://www.facebook.com/jean.tran.336" style="text-decoration: underline;" target="_blank"> 🙌 Facebook</a> 
-                        </p>
-                        </p>
-                        <p style="align-items: center; margin-bottom: 7px;" >
-                        <a This app power by (Natural Language Translation) Text-2-Image Diffusion Generative Model (StableDiffusion).</a>
-                        </p>
-                        </div>
-                    </div>
-                    <div style="
-                        display: inline-flex; 
-                        gap: 0.6rem; 
-                        font-size: 1.0rem;
-                        justify-content: center;
-                        margin-bottom: 8px;
-                        ">
-                        </p> 
-                        
-                        <p>
-                        1. Natural Language Translation Model power by NLLB-200
-                        <a href="https://ai.facebook.com/research/no-language-left-behind/" style="text-decoration: underline;" target="_blank">NLLB</a>  
-                        </p>
-                        <p>
-                        2. Text-to-Image generative model power by Stable Diffusion 
-                        <a href="https://huggingface.co/CompVis" style="text-decoration: underline;" target="_blank">CompVis</a> and 
-                        <a href="https://huggingface.co/stabilityai" style="text-decoration: underline;" target="_blank">Stability AI</a> 
-                        </p>
-                    </div>
-
-                </div>
-                <div class="acknowledgments">
-                    <p><h4>LICENSE</h4>
-                    The model is licensed with a <a href="https://huggingface.co/spaces/CompVis/stable-diffusion-license" style="text-decoration: underline;" target="_blank">CreativeML Open RAIL-M</a> 
-                    license. The authors claim no rights on the outputs you generate. For the full list of restrictions please <a href="https://huggingface.co/spaces/CompVis/stable-diffusion-license" target="_blank" style="text-decoration: underline;" target="_blank">read the license</a>
-                    </p>
-                </div>
-                """
-            )
-            
+               
         
     demo.launch( share=True, enable_queue=True,  debug=True)  #server_name="172.17.0.1", # server_port=2222, share=True, enable_queue=True,  debug=True
 
