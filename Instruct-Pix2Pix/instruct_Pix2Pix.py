@@ -1,7 +1,6 @@
 ## Tran Nhiem 2023/02/08 
 
 '''
-
 Implementation Pix2Pix & Pix2Pix Zero-Shot Model for Kid Education App 
     1. Pix2Pix 
     Pretrained Dataset 
@@ -19,10 +18,9 @@ Implementation Pix2Pix & Pix2Pix Zero-Shot Model for Kid Education App
         
         4. Support Prompt Suggestions for Prompt-to-Prompt (Fine-tune LLM to generate prompt suggestions)
         5. Support Multi-Language for Editting Image (Translation Module or Multi-Lingual Clip Model)
+        (Support NLLB And mBART model many-to-one multilingual translation Module)
 
-    
 References: 
-    
     1. https://www.timothybrooks.com/instruct-pix2pix/
     2. https://pix2pixzero.github.io/
 
@@ -41,6 +39,8 @@ from diffusers import StableDiffusionInstructPix2PixPipeline, DPMSolverMultistep
 from colorthief import ColorThief
 ## Upsacle and Restore Image with 
 from codeformer_infer import inference as codeformer_inference
+## Library for Language Translation Mododel 
+
 
 store_path="/data1/pretrained_weight/StableDiffusion/"
 model_id = "timbrooks/instruct-pix2pix"
@@ -57,7 +57,6 @@ DPM_Solver = DPMSolverMultistepScheduler(
         algorithm_type="dpmsolver++",
         solver_type="midpoint",
         lower_order_final=True,)
-
 
 ## InstructPix2Pix Pipeline
 pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
@@ -101,14 +100,10 @@ example_instructions = [
                         "have it look like a graphic novel.", 
                         ] 
 
-
-
 steps=25
 text_CFG=7.5
 img_CFG=1.5
 example_instructions ="Turn it into a cute cat image."
-
-
 
 ## Testing Code 
 #
@@ -178,8 +173,7 @@ class InstructPix2Pix:
         return edited_image 
 
 ## Gradio inference function 
-def inference(image, instructions, seed=12340000):
-    
+def inference(image, instructions, seed=12340000, steps=25, text_CFG=7.5, img_CFG=1.5, color_palette=False, restore_upscale=False):
     ## Image Preprocessing Reading & Resize Image 
     image = Image.fromarray(image.astype("uint8"), "RGB")
     width, height = image.size
@@ -190,15 +184,17 @@ def inference(image, instructions, seed=12340000):
     image = ImageOps.fit(image, (width, height), method=Image.Resampling.LANCZOS)
     
     generator = torch.manual_seed(seed)
-    image = InstructPix2Pix(pipe, generator)(image, instructions)
+    image = InstructPix2Pix(pipe, generator,steps=steps, text_CFG=text_CFG, img_CFG=img_CFG )(image, instructions)
    
     ## Adding Restore and Upscale
-    #image = InstructPix2Pix.add_restore_upscale(InstructPix2Pix, image)
+    if restore_upscale:
+        image = InstructPix2Pix.add_restore_upscale(InstructPix2Pix, image)
     
-    ## Adding Color Palette 
-    image_path= image.save("/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png")
-    image_path="/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png"
-    image = InstructPix2Pix.add_color_palette(InstructPix2Pix, image_path)
+    ## Adding Color Palette
+    if color_palette:
+        image_path= image.save("/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png")
+        image_path="/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png"
+        image = InstructPix2Pix.add_color_palette(InstructPix2Pix, image_path)
     
     return image
 
@@ -221,6 +217,8 @@ def gradio_demo():
             ]
         ],
     ).launch(share=True)
+
+
      
 if __name__ == "__main__":
     gradio_demo()
