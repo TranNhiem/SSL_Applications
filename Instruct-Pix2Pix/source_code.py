@@ -126,7 +126,6 @@ def infer(prompt_, img,language_input, seed, option="Mask Area",samples_num=4, m
     model_id_={
         "beta_1": "runwayml/stable-diffusion-inpainting", 
         "beta_2": "stabilityai/stable-diffusion-2-inpainting", 
-
     }
 
     SD_model="/data1/pretrained_weight/StableDiffusion/"
