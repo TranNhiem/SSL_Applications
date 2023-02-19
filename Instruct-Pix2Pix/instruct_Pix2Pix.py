@@ -251,7 +251,9 @@ def simple_demo():
             gr.inputs.Textbox(lines=2, label="Instructions"),
         ],
 
-        gr.outputs.Image(type="pil", label="Output Image"),
+        #gr.outputs.Image(type="pil", label="Output Image"),
+        gr.Gallery(label="Edited images",show_label=True).style(grid=[2], height="auto").style(height=400),
+
         title="InstructPix2Pix",
         description=help_text,
         allow_flagging=False,
@@ -362,5 +364,5 @@ def demo_2():
 
 
 if __name__ == "__main__":
-    #gradio_demo
+    #simple_demo
     demo_2()
