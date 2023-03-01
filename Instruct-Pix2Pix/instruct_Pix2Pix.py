@@ -32,6 +32,7 @@ import gradio as gr
 import numpy as np
 import cv2
 import torch
+import pathlib
 import math
 from PIL import Image, ImageOps
 from diffusers import StableDiffusionInstructPix2PixPipeline, DPMSolverMultistepScheduler
@@ -43,8 +44,10 @@ from codeformer_infer import inference as codeformer_inference
 ## NLLB Model 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 ## 
+## Create directore if store_path is not available
+store_path="/media/rick/2TB_2/pretrained_weight/StableDiffusion/"
+pathlib.Path(store_path).mkdir(parents=True, exist_ok=True)
 
-store_path="/data1/pretrained_weight/StableDiffusion/"
 model_id = "timbrooks/instruct-pix2pix"
 
 ## Configure Scheduler for Shoter Inference Time 
@@ -66,6 +69,7 @@ pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                             torch_dtype=torch.float16, 
                             safety_checker=None, 
                             scheduler= DPM_Solver, 
+                            cache_dir=store_path,
                             ).to("cuda")
 ## Enable Flash Attention
 # from xformers.ops import MemoryEfficientAttentionFlashAttentionOp
@@ -179,7 +183,7 @@ class InstructPix2Pix:
 
     def add_restore_upscale(self, image):
         '''Using CodeFormer to restore and upscale image''' 
-        upscale_restore_img=codeformer_inference(image, background_enhance= True, face_upsample= True, upscale=4, codeformer_fidelity= 1.0, model_type="4x")
+        upscale_restore_img=codeformer_inference(image, background_enhance= True, face_upsample= True, upscale=2, codeformer_fidelity= 1.0, model_type="2x")
         return upscale_restore_img
 
     def __call__(self, image, instructions):
@@ -229,14 +233,15 @@ def inference(image, instructions, seed=12340000, steps=25, text_CFG=7.5, img_CF
    
     ## Adding Restore and Upscale
     if restore_upscale:
-        image_path= image.save("/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png")
-        image_path="/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png"
+        image_path= image.save("/home/rick/SSL_Application/SSL_Applications/Instruct-Pix2Pix/output_1.png")
+        image_path="/home/rick/SSL_Application/SSL_Applications/Instruct-Pix2Pix/output_1.png"
         image = InstructPix2Pix.add_restore_upscale(InstructPix2Pix, image_path)
+        #breakpoint()
     
     ## Adding Color Palette
     if color_palette:
-        image_path= image.save("/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png")
-        image_path="/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_1.png"
+        image_path= image.save("/home/rick/SSL_Application/SSL_Applications/Instruct-Pix2Pix/output_1.png")
+        image_path="/home/rick/SSL_Application/SSL_Applications/Instruct-Pix2Pix/output_1.png"
         image = InstructPix2Pix.add_color_palette(InstructPix2Pix, image_path)
     
     # return image ## using this for simple_demo
@@ -259,7 +264,7 @@ def simple_demo():
         allow_flagging=False,
         examples=[
             [
-                "/home/harry/BLIRL/SSL_Applications/Instruct-Pix2Pix/output_2.png",
+                "/home/rick/SSL_Application/SSL_Applications/Instruct-Pix2Pix/output_2.png",
                 example_instructions,
             ]
         ],
