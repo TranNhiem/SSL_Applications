@@ -1,4 +1,20 @@
+'''
+TranNhiem 2023/02/24
 
+
+    App Features Expected: 
+        + Support Drawing 
+        + Support Adding Multiple Language Input 
+        + 
+    Product Expect Service 
+        + Kids Education Platform 
+        + Architecture Design, Artistic 
+        
+Reference Building App 
+    + https://github.com/cloneofsimo/paint-with-words-sd 
+
+
+'''
 import gradio as gr
 
 from io import BytesIO

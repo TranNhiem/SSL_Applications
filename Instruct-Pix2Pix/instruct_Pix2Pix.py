@@ -23,6 +23,7 @@ Implementation Pix2Pix & Pix2Pix Zero-Shot Model for Kid Education App
 References: 
     1. https://www.timothybrooks.com/instruct-pix2pix/
     2. https://pix2pixzero.github.io/
+    3. https://github.com/huggingface/diffusers/releases/tag/v0.12.0 
 
 '''
 
