@@ -1,5 +1,5 @@
 import sys
-sys.path.append('/home/harry/BLIRL/SSL_Applications/inpainting_sd/CodeFormer')
+sys.path.append('/home/rick/SSL_Application/SSL_Applications/inpainting_sd/CodeFormer')
 import os
 import cv2
 import torch
@@ -26,15 +26,15 @@ pretrain_model_url = {
 }
 # download weights
 if not os.path.exists('CodeFormer/weights/CodeFormer/codeformer.pth'):
-    load_file_from_url(url=pretrain_model_url['codeformer'], model_dir="/data1/pretrained_weight/Codeformer/CodeFormer/", progress=True, file_name=None)
+    load_file_from_url(url=pretrain_model_url['codeformer'], model_dir="/media/rick/2TB_2/pretrained_weight/Codeformer/CodeFormer/", progress=True, file_name=None)
 if not os.path.exists('CodeFormer/weights/facelib/detection_Resnet50_Final.pth'):
-    load_file_from_url(url=pretrain_model_url['detection'], model_dir='/data1/pretrained_weight/Codeformer/facelib/', progress=True, file_name=None)
+    load_file_from_url(url=pretrain_model_url['detection'], model_dir='/media/rick/2TB_2/pretrained_weight/Codeformer/facelib/', progress=True, file_name=None)
 if not os.path.exists('CodeFormer/weights/facelib/parsing_parsenet.pth'):
-    load_file_from_url(url=pretrain_model_url['parsing'], model_dir='/data1/pretrained_weight/Codeformer/facelib/', progress=True, file_name=None)
+    load_file_from_url(url=pretrain_model_url['parsing'], model_dir='/media/rick/2TB_2/Codeformer/facelib/', progress=True, file_name=None)
 if not os.path.exists('CodeFormer/weights/realesrgan/RealESRGAN_x2plus.pth'):
-    load_file_from_url(url=pretrain_model_url['realesrgan'], model_dir="/data1/pretrained_weight/Codeformer/realesrgan/", progress=True, file_name=None)
+    load_file_from_url(url=pretrain_model_url['realesrgan'], model_dir="/media/rick/2TB_2/pretrained_weight/Codeformer/realesrgan/", progress=True, file_name=None)
 if not os.path.exists('CodeFormer/weights/realesrgan/RealESRNet_x4plus.pth'):
-    load_file_from_url(url=pretrain_model_url['realesrgan4x'], model_dir="/data1/pretrained_weight/Codeformer/realesrgan/", progress=True, file_name=None)
+    load_file_from_url(url=pretrain_model_url['realesrgan4x'], model_dir="/media/rick/2TB_2/pretrained_weight/Codeformer/realesrgan/", progress=True, file_name=None)
 
 def imread(img_path):
     img = cv2.imread(img_path)
@@ -49,7 +49,7 @@ def set_realesrgan(model_type="2x"):
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
         upsampler = RealESRGANer(
         scale=4,
-        model_path="/data1/pretrained_weight/Codeformer/realesrgan/RealESRNet_x4plus.pth",
+        model_path="/media/rick/2TB_2/pretrained_weight/Codeformer/realesrgan/RealESRNet_x4plus.pth",
         model=model,
         tile=400,
         tile_pad=40,
@@ -67,7 +67,7 @@ def set_realesrgan(model_type="2x"):
     )
         upsampler = RealESRGANer(
             scale=2,
-            model_path="/data1/pretrained_weight/Codeformer/realesrgan/RealESRGAN_x2plus.pth",
+            model_path="/media/rick/2TB_2/pretrained_weight/Codeformer/realesrgan/RealESRGAN_x2plus.pth",
             model=model,
             tile=400,
             tile_pad=40,
@@ -86,7 +86,7 @@ def set_codeformer():
         n_layers= 9, 
         connect_list=["32", "64", "128", "256"]
     ).to(device)
-    ckpt_path = "/data1/pretrained_weight/Codeformer/CodeFormer/codeformer.pth"
+    ckpt_path = "/media/rick/2TB_2/pretrained_weight/Codeformer/CodeFormer/codeformer.pth"
     checkpoint = torch.load(ckpt_path)["params_ema"]
     codeformer_net.load_state_dict(checkpoint)
     codeformer_net.eval()
