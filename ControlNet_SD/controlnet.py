@@ -13,108 +13,254 @@ TranNhiem 2023/03/02
 Reference: 
     https://github.com/lllyasviel/ControlNet/blob/main/docs/annotator.md 
     https://huggingface.co/spaces/hysts/ControlNet 
+    ## Ultra Fast ControlNet setup 
+    https://huggingface.co/blog/controlnet
+
+    ## Install Condition Models 
+    https://github.com/takuma104/controlnet_hinter 
 
 '''
 
-import sys
-sys.path.append('/home/rick/SSL_Application/SSL_Applications/ControlNet_SD/ControlNet')
 
-import pathlib
-import random
-import shlex
-import subprocess
-import cv2 
-import einops 
+
+import os 
+import cv2
+from PIL import Image
 import numpy as np
-import torch 
-from pytorch_lightning import seed_everything
-from ControlNet import config 
+from diffusers.utils import load_image
+from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
+import torch
 
-from ControlNet.annotator.canny import apply_canny
-from ControlNet.annotator.hed import apply_hed, nms
-from ControlNet.annotator.midas import apply_midas
-from ControlNet.annotator.mlsd import apply_mlsd
-from ControlNet.annotator.openpose import apply_openpose
-from ControlNet.annotator.uniformer import apply_uniformer
-from ControlNet.annotator.util import HWC3, resize_image
-from ControlNet.cldm.model import create_model, load_state_dict
-from ControlNet.ldm.models.diffusion.ddim import DDIMSampler
+from diffusers import UniPCMultistepScheduler
+from controlnet_aux import OpenposeDetector, MLSDdetector, HEDdetector
+import controlnet_hinter
 
-from ControlNet.share import * 
+##---------------------- Availalbe ControlNet Condition Model ----------------------##
 
-## Base Model 
-ORIGINAL_WEIGHT_ROOT = 'https://huggingface.co/lllyasviel/ControlNet/resolve/main/models/'
-ORIGINAL_MODEL_NAMES = {
-    'canny': 'control_sd15_canny.pth',
-    'hough': 'control_sd15_mlsd.pth',
-    'hed': 'control_sd15_hed.pth',
-    'scribble': 'control_sd15_scribble.pth',
-    'pose': 'control_sd15_openpose.pth',
-    'seg': 'control_sd15_seg.pth',
-    'depth': 'control_sd15_depth.pth',
-    'normal': 'control_sd15_normal.pth',
-}
-## LightWeight Model --> Optimization for Mobile Device
-LIGHTWEIGHT_MODEL_NAMES = {
-    'canny': 'control_canny-fp16.safetensors',
-    'hough': 'control_mlsd-fp16.safetensors',
-    'hed': 'control_hed-fp16.safetensors',
-    'scribble': 'control_scribble-fp16.safetensors',
-    'pose': 'control_openpose-fp16.safetensors',
-    'seg': 'control_seg-fp16.safetensors',
-    'depth': 'control_depth-fp16.safetensors',
-    'normal': 'control_normal-fp16.safetensors',
-}
-LIGHTWEIGHT_WEIGHT_ROOT = 'https://huggingface.co/webui/ControlNet-modules-safetensors/resolve/main/'
+'''
+lllyasviel/sd-controlnet-depth
+lllyasviel/sd-controlnet-hed
+lllyasviel/sd-controlnet-normal
+lllyasviel/sd-controlnet-scribble
+lllyasviel/sd-controlnet-seg
+lllyasviel/sd-controlnet-openpose
+lllyasviel/sd-controlnet-mlsd
 
-## Class Object Using Model 
-class ControlNet:
-    def __init__(self,
-                 
-                 model_config_path: str = 'ControlNet/models/cldm_v15.yaml',
-                 model_dir: str = 'models',# Output Path to store weights 
-                 use_lightweight: bool = True):
-                
+'''
 
-        self.device = torch.device(
-            'cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = create_model(model_config_path).to(self.device)
-        self.ddim_sampler = DDIMSampler(self.model)
-        self.task_name = ''
+test_image = load_image(
+    "https://hf.co/datasets/huggingface/documentation-images/resolve/main/diffusers/input_image_vermeer.png")
 
-        self.model_dir = pathlib.Path(model_dir)
-        self.model_dir.mkdir(exist_ok=True, parents=True)
+test_image
 
-        self.use_lightweight = use_lightweight
-        
-        ## Load Model 
-        if self.use_lightweight:
-            self.model_names = LIGHTWEIGHT_MODEL_NAMES
-            self.weight_root = LIGHTWEIGHT_WEIGHT_ROOT
-            base_model_url = 'https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors'
-            self.load_base_model(base_model_url)
-        else:
-            self.model_names = ORIGINAL_MODEL_NAMES
-            self.weight_root = ORIGINAL_WEIGHT_ROOT
-        
-        self.download_models() 
-    
-    def download_base_model(self, model_url: str) -> pathlib.Path:
-        model_name = model_url.split('/')[-1]
-        model_path = self.model_dir / model_name
-        if not model_path.exists():
-            print(f'Downloading {model_name} ...')
-            subprocess.run(shlex.split(f'wget {model_url} -P {self.model_dir}'))
-        return model_path
-    
-    def load_base_model(self, model_url: str):
-        model_path = self.download_base_model(model_url)
-        self.model.load_state_dict(load_state_dict(model_path, location=self.device.type), strict=False)
-    
-    def load_weight(self, task_name: str) -> None: 
-        if task_name ==self.task_name: 
-            return 
-        weight_path= self.get_weight_path(task_name)
-        if not self.use_lightweight:
-            self.model.load_state_dict(load_state_dict(weight_path, location=self.device.type), strict=False)
-            
+weight_path= "/media/rick/f7a9be3d-25cd-45d6-b503-7cb8bd32dbd5/pretrained_weight/StableDiffusion/"
+## check the weight path if not create the path
+if not os.path.exists(weight_path):
+    os.makedirs(weight_path)
+
+
+#****************************************************************************************#
+##---------------------- ControlNet with Canny Edege Condition ----------------------##
+#****************************************************************************************#
+
+controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-canny",  cache_dir=weight_path, torch_dtype=torch.float16)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet, torch_dtype=torch.float16
+)
+pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+
+image = np.array(test_image)
+low_threshold = 100
+high_threshold = 200
+image = cv2.Canny(image, low_threshold, high_threshold)
+image = image[:, :, None]
+image = np.concatenate([image, image, image], axis=2)
+canny_image = Image.fromarray(image)
+canny_image
+
+prompt = ", best quality, extremely detailed"
+prompt = [t + prompt for t in [ "taylor swift"]] #"Sandra Oh", "Kim Kardashian", "rihanna",
+generator = [torch.Generator(device="cpu").manual_seed(2) for i in range(len(prompt))]
+
+# output = pipe(
+#     prompt,
+#     canny_image,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./canny_output.png")
+
+#****************************************************************************************#
+##---------------------- ControlNet with HED Edege Condition ----------------------##
+#****************************************************************************************#
+
+#hed = HEDdetector.from_pretrained("lllyasviel/ControlNet")
+#hed_img= hed(test_image)
+hed_img= controlnet_hinter.hint_hed(test_image)
+
+controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-hed",  cache_dir=weight_path, torch_dtype=torch.float16)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet, torch_dtype=torch.float16
+)
+pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+# output = pipe(
+#     prompt,
+#     hed_img,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./hed_1_output.png")
+
+
+#****************************************************************************************#
+##---------------------- ControlNet with scribble Edege Condition ----------------------##
+#****************************************************************************************#
+scribble_img= controlnet_hinter.hint_scribble(test_image)
+scribble_img.save("./scribble.png")
+controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-scribble",  cache_dir=weight_path, torch_dtype=torch.float16)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet, torch_dtype=torch.float16
+)
+pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+
+# output = pipe(
+#     prompt,
+#     scribble_img,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./scribble_output.png")
+
+
+#****************************************************************************************#
+##---------------------- ControlNet with Hough & MLSD  Edege Condition ----------------------##
+#****************************************************************************************#
+# mlsd = MLSDdetector.from_pretrained("lllyasviel/ControlNet")
+# mlsd_1= mlsd(test_image)
+# mlsd_1.save("./mlsd_1.png")
+
+mlsd_2= controlnet_hinter.hint_hough(test_image)
+mlsd_2.save("./mlsd_2.png")
+
+controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-mlsd",  cache_dir=weight_path, torch_dtype=torch.float16)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet, torch_dtype=torch.float16
+)
+pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
+# output = pipe(
+#     prompt,
+#     mlsd_2,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./mlsd_1_output.png")
+
+
+#****************************************************************************************#
+##---------------------- ControlNet with Depth and Normal Map Condition ----------------------##
+#****************************************************************************************#
+depth= controlnet_hinter.hint_depth(test_image)
+depth.save("./depth_img.png")
+
+normal_map= controlnet_hinter.hint_normal(test_image)
+normal_map.save("./normal_map.png")
+
+controlnet_depth = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth",  cache_dir=weight_path, torch_dtype=torch.float16)
+controlnet_normal = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-normal",  cache_dir=weight_path, torch_dtype=torch.float16)
+control_depth_normal= [ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-depth",  cache_dir=weight_path, torch_dtype=torch.float16), 
+                       ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-normal",  cache_dir=weight_path, torch_dtype=torch.float16)]
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet_depth, torch_dtype=torch.float16)
+pipe_1 = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet_normal, torch_dtype=torch.float16)
+pipe_2= StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=control_depth_normal, torch_dtype=torch.float16)
+## For Depth image Condition 
+# pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+# pipe.enable_model_cpu_offload()
+# pipe.enable_xformers_memory_efficient_attention()
+# output = pipe(
+#     prompt,
+#     depth,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./depth_output.png")
+
+# ## For Normal Map Condition
+# pipe_1.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+# pipe_1.enable_model_cpu_offload()
+# pipe_1.enable_xformers_memory_efficient_attention()
+# output = pipe_1(
+#     prompt,
+#     normal_map,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./normal_map_output.png")
+
+# ## For Depth && Normal Map Condition
+# pipe_2.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+# pipe_2.enable_model_cpu_offload()
+# pipe_2.enable_xformers_memory_efficient_attention()
+# img_depth_normal= [depth, normal_map]
+
+# output = pipe_2(
+#     prompt,
+#     img_depth_normal,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+# image=output[0][0]
+# image.save("./depth_normal_output.png")
+
+#****************************************************************************************#
+##---------------------- ControlNet with Segmentation Map Condition ----------------------##
+#****************************************************************************************#
+# segmentation_map= controlnet_hinter.hint_segmentation(test_image)
+# segmentation_map.save("./segmentation_map.png")
+
+# controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-seg",  cache_dir=weight_path, torch_dtype=torch.float16)
+# pipe = StableDiffusionControlNetPipeline.from_pretrained(
+#     "runwayml/stable-diffusion-v1-5", cache_dir=weight_path, controlnet=controlnet, torch_dtype=torch.float16
+# )
+# pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+# pipe.enable_model_cpu_offload()
+# pipe.enable_xformers_memory_efficient_attention()
+# output = pipe(
+#     prompt,
+#     segmentation_map,
+#     negative_prompt=["monochrome, lowres, bad anatomy, worst quality, low quality"] ,
+#     num_inference_steps=20,
+#     generator=generator,
+# )
+
+# image=output[0][0]
+# image.save("./segmentation_output.png")
